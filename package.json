@@ -1,0 +1,21 @@
+{
+  "name": "xflow",
+  "version": "1.0.0",
+  "description": "Multi-agent AI system with x402 payment routing on X Layer.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cryptohakka/xflow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/cryptohakka/xflow/issues"
+  },
+  "homepage": "https://github.com/cryptohakka/xflow#readme"
+}
