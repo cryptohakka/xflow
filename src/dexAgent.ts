@@ -3,9 +3,9 @@
  * Uses OKX OnchainOS Skills for DEX operations
  */
 
-const OKX_API_KEY = process.env.OKX_API_KEY || '03f0b376-251c-4618-862e-ae92929e0416';
-const OKX_SECRET_KEY = process.env.OKX_SECRET_KEY || '652ECE8FF13210065B0851FFDA9191F7';
-const OKX_PASSPHRASE = process.env.OKX_PASSPHRASE || 'onchainOS#666';
+const OKX_API_KEY = process.env.OKX_API_KEY || '';
+const OKX_SECRET_KEY = process.env.OKX_SECRET_KEY || '';
+const OKX_PASSPHRASE = process.env.OKX_PASSPHRASE || '';
 
 export interface SwapParams {
   fromToken: string;
