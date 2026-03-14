@@ -1,92 +1,97 @@
 /**
  * XFlow DEX Agent
- * Uses OKX OnchainOS Skills for DEX operations
+ * OKX DEX Aggregator API for X Layer
  */
+import { createHmac } from 'crypto';
 
-const OKX_API_KEY = process.env.OKX_API_KEY || '';
-const OKX_SECRET_KEY = process.env.OKX_SECRET_KEY || '';
-const OKX_PASSPHRASE = process.env.OKX_PASSPHRASE || '';
+const CHAIN_INDEX = '196'; // X Layer
 
-export interface SwapParams {
-  fromToken: string;
-  toToken: string;
-  amount: string;
-  chainId?: string; // default: X Layer (196)
-  userAddress: string;
+function getEnv(key: string): string {
+  return process.env[key] || '';
 }
 
-export interface TokenParams {
-  tokenAddress: string;
-  chainId?: string;
-}
-
-/**
- * Get DEX quote via OnchainOS
- */
-export async function getDexQuote(params: SwapParams) {
-  const chainId = params.chainId || '196'; // X Layer
-  const res = await fetch('https://www.okx.com/api/v5/dex/aggregator/quote', {
-    headers: {
-      'OK-ACCESS-KEY': OKX_API_KEY,
-      'OK-ACCESS-SIGN': await sign('GET', '/api/v5/dex/aggregator/quote', OKX_SECRET_KEY, OKX_PASSPHRASE),
-      'OK-ACCESS-TIMESTAMP': new Date().toISOString(),
-      'OK-ACCESS-PASSPHRASE': OKX_PASSPHRASE,
-    },
-  });
-  return res.json();
-}
-
-/**
- * Get token info via OnchainOS
- */
-export async function getTokenInfo(params: TokenParams) {
-  const chainId = params.chainId || '196';
-  const url = `https://www.okx.com/api/v5/dex/aggregator/token-info?chainId=${chainId}&tokenContractAddress=${params.tokenAddress}`;
-  const timestamp = new Date().toISOString();
-  const sign = await hmacSign('GET', '/api/v5/dex/aggregator/token-info', '', timestamp, OKX_SECRET_KEY, OKX_PASSPHRASE);
-  const res = await fetch(url, {
-    headers: {
-      'OK-ACCESS-KEY': OKX_API_KEY,
-      'OK-ACCESS-SIGN': sign,
-      'OK-ACCESS-TIMESTAMP': timestamp,
-      'OK-ACCESS-PASSPHRASE': OKX_PASSPHRASE,
-    },
-  });
-  return res.json();
-}
-
-/**
- * HMAC-SHA256 signing for OKX API
- */
-async function hmacSign(
-  method: string,
-  path: string,
-  body: string,
-  timestamp: string,
-  secretKey: string,
-  passphrase: string
-): Promise<string> {
+function sign(timestamp: string, method: string, path: string, body = ''): string {
   const message = timestamp + method + path + body;
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(secretKey),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false, ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(message));
-  return btoa(String.fromCharCode(...new Uint8Array(signature)));
+  return createHmac('sha256', getEnv('OKX_SECRET_KEY'))
+    .update(message)
+    .digest('base64');
 }
 
-async function sign(method: string, path: string, secretKey: string, passphrase: string): Promise<string> {
+function headers(path: string, method = 'GET', body = '') {
   const timestamp = new Date().toISOString();
-  return hmacSign(method, path, '', timestamp, secretKey, passphrase);
+  return {
+    'Content-Type': 'application/json',
+    'OK-ACCESS-KEY': getEnv('OKX_API_KEY'),
+    'OK-ACCESS-SIGN': sign(timestamp, method, path, body),
+    'OK-ACCESS-TIMESTAMP': timestamp,
+    'OK-ACCESS-PASSPHRASE': getEnv('OKX_PASSPHRASE'),
+  };
+}
+
+export interface QuoteParams {
+  fromTokenAddress: string;
+  toTokenAddress: string;
+  amount: string;
+  chainIndex?: string;
+}
+
+/**
+ * Get DEX quote on X Layer
+ */
+export async function getDexQuote(params: QuoteParams) {
+  const chainIndex = params.chainIndex || CHAIN_INDEX;
+  const query = `chainIndex=${chainIndex}&amount=${params.amount}&fromTokenAddress=${params.fromTokenAddress}&toTokenAddress=${params.toTokenAddress}`;
+  const path = `/api/v6/dex/aggregator/quote?${query}`;
+  const res = await fetch(`https://www.okx.com${path}`, { headers: headers(path) });
+  const json = await res.json() as any;
+  if (json.code !== '0') throw new Error(`OKX API error: ${json.msg}`);
+  return json.data[0];
+}
+
+/**
+ * Get swap transaction data
+ */
+export async function getSwapTx(params: QuoteParams & { userWalletAddress: string; slippage?: string }) {
+  const chainIndex = params.chainIndex || CHAIN_INDEX;
+  const query = `chainIndex=${chainIndex}&amount=${params.amount}&fromTokenAddress=${params.fromTokenAddress}&toTokenAddress=${params.toTokenAddress}&userWalletAddress=${params.userWalletAddress}&slippage=${params.slippage || '0.01'}`;
+  const path = `/api/v6/dex/aggregator/swap?${query}`;
+  const res = await fetch(`https://www.okx.com${path}`, { headers: headers(path) });
+  const json = await res.json() as any;
+  if (json.code !== '0') throw new Error(`OKX API error: ${json.msg}`);
+  return json.data[0];
 }
 
 /**
  * DEX Agent handler — called by Orchestrator
  */
-export async function handleDexQuery(query: string) {
+export async function handleDexQuery(query: string): Promise<any> {
   console.log(`🔄 DEX Agent: ${query}`);
-  // TODO: LLMでqueryをparseしてgetDexQuote/getTokenInfoを呼ぶ
-  return { agent: 'dex', query, status: 'TODO' };
+
+  // USDCアドレス(X Layer) と WOKBアドレス
+  const USDC  = '0x74b7f16337b8972027f6196a17a631ac6de26d22';
+  const WOKB  = '0xe538905cf8410324e03a5a23c1c177a474d59b2b';
+
+  // queryからswap意図を検出
+  const isSwap = /swap|buy|sell|trade/i.test(query);
+
+  if (isSwap) {
+    const quote = await getDexQuote({
+      fromTokenAddress: USDC,
+      toTokenAddress: WOKB,
+      amount: '1000000', // 1 USDC
+    });
+    return {
+      agent: 'dex',
+      action: 'quote',
+      from: `${quote.fromToken.tokenSymbol}`,
+      to: `${quote.toToken.tokenSymbol}`,
+      fromAmount: quote.fromTokenAmount,
+      toAmount: quote.toTokenAmount,
+      route: quote.dexRouterList[0]?.dexProtocol?.dexName,
+      priceImpact: quote.priceImpactPercent,
+      estimateGasFee: quote.estimateGasFee,
+    };
+  }
+
+  return { agent: 'dex', query, status: 'unsupported' };
 }
