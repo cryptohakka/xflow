@@ -92,7 +92,7 @@ export async function getSwapTxData(req: SwapRequest) {
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
   const slippage = req.slippage || '0.01';
 
-  const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&userWalletAddress=${req.userAddress}&slippage=${slippage}`;
+  const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&userWalletAddress=${req.userAddress}&slippagePercent=${slippage}`;
   const path = `/api/v6/dex/aggregator/swap?${query}`;
   const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path) });
   const json = await res.json() as any;

@@ -19,7 +19,9 @@ if (!privateKey) {
   process.exit(1);
 }
 
-const query = process.argv.slice(2).join(' ');
+const rawArgs = process.argv.slice(2);
+const query = rawArgs.filter(a => !a.startsWith('--')).join(' ');
+const userAddress = rawArgs.find(a => a.startsWith('--address='))?.split('=')[1];
 if (!query) {
   console.log('Usage: node src/index.ts "<query>"');
   console.log('Examples:');
@@ -34,6 +36,7 @@ console.log(`📝 Query: ${query}\n`);
 const result = await orchestrate(query, {
   privateKey,
   preferredNetwork: 'eip155:196',
+  userAddress,
 });
 
 console.log(`\n✅ Done`);

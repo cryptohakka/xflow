@@ -104,6 +104,9 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
+  // Rate limit: 1 req/sec
+  await new Promise(r => setTimeout(r, 1100));
+
   // Step 4: DEX Agent
   const result = await handleDexQuery(query, userAddress);
 
