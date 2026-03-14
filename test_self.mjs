@@ -22,7 +22,7 @@ const res = await fetchWithPayment('http://localhost:3010/swap', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    query: 'swap 1 USDC to OKB',
+    query: 'swap 0.01 USDC to OKB',
     userAddress: env.PAYEE_ADDRESS || account.address,
   }),
 });

@@ -92,6 +92,7 @@ export async function getSwapTxData(req: SwapRequest) {
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
   const slippage = req.slippage || '0.01';
 
+  console.log(`[DEX] getSwapTxData amount=${req.amount} amountRaw=${amountRaw}`);
   const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&userWalletAddress=${req.userAddress}&slippagePercent=${slippage}`;
   const path = `/api/v6/dex/aggregator/swap?${query}`;
   const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path) });
@@ -122,31 +123,32 @@ export async function getSwapTxData(req: SwapRequest) {
 /**
  * DEX Agent handler — called by Orchestrator
  */
-export async function handleDexQuery(query: string, userAddress?: string): Promise<any> {
-  console.log(`🔄 DEX Agent: ${query}`);
+export async function handleDexQuery(query: string, userAddress?: string, existingQuote?: any): Promise<any> {
+  console.log(`[DEX] handleDexQuery userAddress=${userAddress} hasQuote=${!!existingQuote} amount=${existingQuote?.fromAmount}`);
 
   const isSwap = /swap|buy|sell|trade/i.test(query);
-
-  // queryからトークンペアを抽出（簡易）
-  const usdcToOkb = /usdc.*okb|usdc.*wokb/i.test(query);
   const okbToUsdc = /okb.*usdc|wokb.*usdc/i.test(query);
 
   if (isSwap && userAddress) {
     const req: SwapRequest = {
-      fromToken: okbToUsdc ? 'WOKB' : 'USDC',
-      toToken:   okbToUsdc ? 'USDC' : 'WOKB',
-      amount: '1.0',
+      fromToken: existingQuote?.fromToken || (okbToUsdc ? 'WOKB' : 'USDC'),
+      toToken:   existingQuote?.toToken   || (okbToUsdc ? 'USDC' : 'WOKB'),
+      amount:    existingQuote?.fromAmount || '1.0',
       userAddress,
     };
+    console.log(`[DEX] getSwapTxData amount=${req.amount}`);
     return getSwapTxData(req);
   }
 
+  if (isSwap && existingQuote) {
+    return existingQuote;
+  }
+
   if (isSwap) {
-    // userAddressなしはquoteのみ
     return getSwapQuote({
       fromToken: okbToUsdc ? 'WOKB' : 'USDC',
       toToken:   okbToUsdc ? 'USDC' : 'WOKB',
-      amount: '1.0',
+      amount: existingQuote?.fromAmount || '1.0',
       userAddress: '0x0000000000000000000000000000000000000001',
     });
   }

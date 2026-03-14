@@ -108,7 +108,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   await new Promise(r => setTimeout(r, 1100));
 
   // Step 4: DEX Agent
-  const result = await handleDexQuery(query, userAddress);
+  const result = await handleDexQuery(query, userAddress, quote);
 
   return {
     intent,
