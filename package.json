@@ -17,5 +17,15 @@
   "bugs": {
     "url": "https://github.com/cryptohakka/xflow/issues"
   },
-  "homepage": "https://github.com/cryptohakka/xflow#readme"
+  "homepage": "https://github.com/cryptohakka/xflow#readme",
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@x402/evm": "^2.6.0",
+    "@x402/fetch": "^2.6.0",
+    "viem": "^2.47.4"
+  }
 }
