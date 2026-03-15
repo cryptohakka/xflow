@@ -12,13 +12,13 @@ External Agent / User
         │  x402 payment (any chain: Base / Polygon / Avalanche / X Layer)
         ▼
 ┌─────────────────────────┐
-│   Smart Payment Router   │  ← Auto-selects cheapest chain by gas cost (USD)
-│   x402 Payment Adapter   │  ← Handles 402 handshake automatically
+│   Smart Payment Router  │  ← Auto-selects cheapest chain by gas cost (USD)
+│   x402 Payment Adapter  │  ← Handles 402 handshake automatically
 └────────────┬────────────┘
              │
              ▼
 ┌─────────────────────────┐
-│      Orchestrator        │  ← LLM-powered intent parsing (Gemini 2.5 Flash Lite)
+│      Orchestrator       │  ← LLM-powered intent parsing (Gemini 2.5 Flash Lite)
 └────────────┬────────────┘
              │
      ┌───────┴───────┐
@@ -36,13 +36,13 @@ External Agent / User
              │
              ▼ (POST /confirm with swap txHash)
 ┌─────────────────────────┐
-│    Analytics Agent       │  ← Records ONLY successful swaps onchain
+│    Analytics Agent      │  ← Records ONLY successful swaps onchain
 └─────────────────────────┘
              │
              ▼
 ┌─────────────────────────┐
-│      Dashboard           │  ← Real-time visualization
-│  (XFlowAnalytics.sol)    │  ← Deployed on X Layer
+│      Dashboard          │  ← Real-time visualization
+│  (XFlowAnalytics.sol)   │  ← Deployed on X Layer
 └─────────────────────────┘
 ```
 
@@ -52,7 +52,7 @@ External Agent / User
 - **x402 Payment Adapter** — Any x402-compatible agent can call XFlow regardless of which chain they hold USDC on
 - **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.0 Flash Lite (OpenRouter)
 - **Risk Agent** — Evaluates price impact, amount size, and route quality before execution. Rejects HIGH risk swaps automatically.
-- **DEX Agent** — Fetches unsigned swap TX data from OKX DEX Aggregator on X Layer
+- **DEX Agent** — Fetches unsigned swap TX data via OKX OnchainOS DEX Aggregator API on X Layer
 - **Analytics Agent** — Records only **successful** swaps onchain via `XFlowAnalytics.sol` deployed on X Layer
 - **Real-time Dashboard** — Visualizes agent activity, payment chains, and DEX routes at `/dashboard.html`
 
@@ -235,7 +235,7 @@ Returns real-time analytics data from `XFlowAnalytics.sol`.
 4. x402 payment settled by payai facilitator
 5. Orchestrator parses intent with Gemini 2.5 Flash Lite
 6. Risk Agent evaluates price impact & slippage → approves or rejects
-7. DEX Agent fetches unsigned swap TX from OKX DEX Aggregator (X Layer)
+7. DEX Agent fetches unsigned swap TX data via OKX OnchainOS DEX Aggregator API on X Layer
 8. Agent receives unsigned TX → signs & broadcasts on X Layer
 9. On success: Agent calls POST /confirm
 10. Analytics Agent records swap onchain (XFlowAnalytics.sol, X Layer)
