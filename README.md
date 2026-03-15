@@ -18,7 +18,7 @@ External Agent / User
              │
              ▼
 ┌─────────────────────────┐
-│      Orchestrator        │  ← LLM-powered intent parsing (Claude Haiku)
+│      Orchestrator        │  ← LLM-powered intent parsing (Gemini 2.5 flash lite)
 └────────────┬────────────┘
              │
      ┌───────┴───────┐
@@ -45,7 +45,7 @@ External Agent / User
 
 - **Smart Payment Router** — Checks USDC balances across all supported chains, selects the cheapest chain by gas cost (USD-denominated)
 - **x402 Payment Adapter** — Any x402-compatible agent can call XFlow regardless of which chain they hold USDC on
-- **LLM Intent Parsing** — Natural language → structured swap parameters via Claude Haiku
+- **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.5 flash lite
 - **Risk Agent** — Evaluates price impact, amount size, and route quality before execution
 - **DEX Agent** — Fetches unsigned swap TX data from OKX DEX Aggregator on X Layer
 - **Analytics Agent** — Records every swap onchain via `XFlowAnalytics.sol` deployed on X Layer
@@ -74,7 +74,7 @@ External Agent / User
 git clone https://github.com/cryptohakka/xflow
 cd xflow
 cp .env.example .env
-# Fill in PRIVATE_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, ANTHROPIC_API_KEY
+# Fill in PRIVATE_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, OPENROUTER_API_KEY
 docker compose up -d
 ```
 
@@ -170,12 +170,13 @@ Returns real-time analytics data from `XFlowAnalytics.sol`.
 
 ```
 1. Agent sends natural language swap request + x402 payment
-2. Smart Payment Router selects cheapest chain automatically
-3. Orchestrator parses intent with Claude Haiku
-4. Risk Agent evaluates price impact & slippage
-5. DEX Agent fetches unsigned TX from OKX DEX Aggregator (X Layer)
-6. Analytics Agent records swap onchain (XFlowAnalytics.sol, X Layer)
-7. Agent receives unsigned TX → signs → broadcasts on X Layer
+2. Smart Payment Router selects cheapest chain automatically  
+3. x402 payment settled by facilitator
+4. Orchestrator parses intent with Gemini 2.5 flash lite
+5. Risk Agent evaluates price impact & slippage
+6. DEX Agent fetches unsigned swap TX from OKX DEX Aggregator (X Layer)
+7. Analytics Agent records intent onchain (XFlowAnalytics.sol, X Layer)
+8. Agent receives unsigned TX → signs & broadcasts on X Layer → swap executed
 ```
 
 ## Environment Variables
@@ -197,7 +198,7 @@ PORT=3010
 - [OKX DEX Aggregator](https://web3.okx.com) — Best swap routes on X Layer
 - [payai facilitator](https://facilitator.payai.network) — x402 settlement
 - [X Layer](https://www.okx.com/xlayer) — EVM chain by OKX (eip155:196)
-- [Anthropic Claude](https://anthropic.com) — LLM intent parsing
+- [Openrouter](https://openrouter.ai/) — LLM intent parsing
 - [viem](https://viem.sh) — EVM interactions
 
 ## License
