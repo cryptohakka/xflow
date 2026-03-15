@@ -47,6 +47,19 @@ const USDC_EIP712: Record<string, { name: string; version: string }> = {
 const NETWORKS = ['eip155:196', 'eip155:8453', 'eip155:137', 'eip155:43114'];
 
 const paymentConfig = {
+  'POST /confirm': {
+    accepts: NETWORKS.map(network => ({
+      scheme: 'exact',
+      network,
+      price: { amount: '1000', asset: USDC_ADDRESSES[network], extra: USDC_EIP712[network] },
+      payTo: PAYEE_ADDRESS,
+      asset: USDC_ADDRESSES[network],
+      extra: USDC_EIP712[network],
+    })),
+    description: 'XFlow - Execution fee (successful swap only)',
+    mimeType: 'application/json',
+    resource: `http://localhost:${process.env.PORT || 3010}/confirm`,
+  },
   'POST /swap': {
     accepts: NETWORKS.map(network => ({
       scheme: 'exact',
@@ -71,7 +84,7 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
 });
 
-// Confirm swap and record onchain (free - called after successful swap)
+// Confirm swap and record onchain (x402 protected - $0.001 on success)
 app.post('/confirm', async (req: Request, res: Response) => {
   try {
     const { txHash, fromToken, toToken, fromAmount, toAmount, paymentNetwork, route, riskLevel, agentAddress } = req.body;

@@ -1,4 +1,6 @@
 import { createSmartPaymentFetch } from './src/smartPaymentRouter.js';
+import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
+import { ExactEvmScheme } from '@x402/evm';
 import { privateKeyToAccount } from 'viem/accounts';
 import { readFileSync } from 'fs';
 
@@ -56,10 +58,13 @@ if (tx) {
   const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
   console.log(`   ${receipt.status === 'success' ? '✅ Swap successful!' : '❌ Swap failed'}`);
 
-  // Step 3: confirm to Analytics Agent
+  // Step 3: confirm to Analytics Agent (x402 execution fee)
+  const confirmFetch = wrapFetchWithPaymentFromConfig(fetch, {
+    schemes: [{ network: selectedNetwork?.network || 'eip155:196', client: new ExactEvmScheme(account2) }],
+  });
   if (receipt.status === 'success') {
     console.log('\n3️⃣ Recording swap onchain...');
-    const confirmRes = await fetch('http://localhost:3010/confirm', {
+    const confirmRes = await confirmFetch('http://localhost:3010/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -74,6 +79,11 @@ if (tx) {
         agentAddress: account2.address,
       }),
     });
+    const confirmPr = confirmRes.headers.get('payment-response');
+    if (confirmPr) {
+      const confirmPayment = JSON.parse(Buffer.from(confirmPr, 'base64').toString());
+      console.log(`   💸 Execution fee paid on: ${confirmPayment.network} | ${confirmPayment.transaction}`);
+    }
     const confirmData = await confirmRes.json();
     if (confirmData.analyticsTx) {
       console.log(`   ✅ Analytics TX: ${confirmData.analyticsTx}`);

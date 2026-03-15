@@ -82,7 +82,11 @@ console.log(`\n${receipt.status === 'success' ? '✅ Swap successful!' : '❌ Sw
 // Step 4: Analytics - only record if swap succeeded
 if (receipt.status === 'success') {
   console.log('4️⃣ Recording swap onchain...');
-  const confirmRes = await fetch('http://localhost:3010/confirm', {
+  // x402 payment for execution fee
+  const confirmFetch = wrapFetchWithPaymentFromConfig(fetch, {
+    schemes: [{ network: selectedNetwork?.network || 'eip155:196', client: new ExactEvmScheme(account2 || account) }],
+  });
+  const confirmRes = await confirmFetch('http://localhost:3010/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
