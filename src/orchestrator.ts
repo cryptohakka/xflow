@@ -27,7 +27,7 @@ async function parseIntent(query: string): Promise<ParsedIntent> {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-lite-001',
+        model: 'google/gemini-2.5-flash-lite',
         max_tokens: 200,
         messages: [{
           role: 'user',
