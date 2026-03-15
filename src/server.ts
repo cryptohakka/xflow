@@ -5,6 +5,9 @@
  */
 import 'dotenv/config';
 import express, { Request, Response } from 'express';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
@@ -12,6 +15,7 @@ import { orchestrate } from './orchestrator.js';
 
 const app = express();
 app.use(express.json());
+app.use(express.static(join(__dirname, 'public')));
 
 // ── x402 setup ────────────────────────────────────────────────
 const PAYEE_ADDRESS = process.env.PAYEE_ADDRESS || '0x191c78ad59cc4fd59155c351c08c06c0e794b0b1';
@@ -65,6 +69,17 @@ app.use(paymentMiddleware(paymentConfig, x402Server, undefined, undefined, false
 // Health check (free)
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
+});
+
+// Dashboard data (free)
+app.get('/dashboard', async (_req: Request, res: Response) => {
+  try {
+    const { getDashboardData } = await import('./analyticsAgent.js');
+    const data = await getDashboardData();
+    res.json(data);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Main swap endpoint (x402 protected)
