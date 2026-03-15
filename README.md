@@ -2,7 +2,7 @@
 
 **AI Agent Payment Infrastructure on X Layer**
 
-XFlow is a multi-agent system that enables AI agents to autonomously execute DeFi operations using x402 micropayments. Any agent holding USDC on any supported chain can pay and access XFlow's swap pipeline — no API keys, no subscriptions.
+XFlow is a multi-agent system that enables AI agents to autonomously execute DeFi operations using x402 micropayments. Any agent holding USDC on any supported chain can pay and access XFlow's swap pipeline — no API keys, no subscriptions, pay only what you use.
 
 ## Architecture
 
@@ -12,26 +12,31 @@ External Agent / User
         │  x402 payment (any chain: Base / Polygon / Avalanche / X Layer)
         ▼
 ┌─────────────────────────┐
-│   Smart Payment Router   │  ← Auto-selects cheapest chain by gas cost
-│   x402 Payment Adapter   │  ← Handles 402 handshake
+│   Smart Payment Router   │  ← Auto-selects cheapest chain by gas cost (USD)
+│   x402 Payment Adapter   │  ← Handles 402 handshake automatically
 └────────────┬────────────┘
              │
              ▼
 ┌─────────────────────────┐
-│      Orchestrator        │  ← LLM-powered intent parsing (Gemini 2.5 flash lite)
+│      Orchestrator        │  ← LLM-powered intent parsing (Gemini 2.5 Flash Lite)
 └────────────┬────────────┘
              │
      ┌───────┴───────┐
      ▼               ▼
 ┌─────────┐   ┌─────────────┐
 │  Risk   │   │  DEX Agent  │  ← OKX DEX Aggregator API
-│  Agent  │   │             │  ← Generates unsigned swap TX
+│  Agent  │   │             │  ← Generates unsigned swap TX on X Layer
 └────┬────┘   └──────┬──────┘
      │               │
      └───────┬───────┘
-             ▼
+             │
+             ▼ (unsigned TX returned to Agent)
+             │
+    Agent signs & broadcasts on X Layer
+             │
+             ▼ (POST /confirm with swap txHash)
 ┌─────────────────────────┐
-│    Analytics Agent       │  ← Records swap onchain (X Layer)
+│    Analytics Agent       │  ← Records ONLY successful swaps onchain
 └─────────────────────────┘
              │
              ▼
@@ -43,28 +48,40 @@ External Agent / User
 
 ## Key Features
 
-- **Smart Payment Router** — Checks USDC balances across all supported chains, selects the cheapest chain by gas cost (USD-denominated)
+- **Smart Payment Router** — Checks USDC balances across all supported chains, automatically selects the cheapest chain by gas cost (USD-denominated). No need to manually choose which chain to pay from.
 - **x402 Payment Adapter** — Any x402-compatible agent can call XFlow regardless of which chain they hold USDC on
-- **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.5 flash lite
-- **Risk Agent** — Evaluates price impact, amount size, and route quality before execution
+- **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.0 Flash Lite (OpenRouter)
+- **Risk Agent** — Evaluates price impact, amount size, and route quality before execution. Rejects HIGH risk swaps automatically.
 - **DEX Agent** — Fetches unsigned swap TX data from OKX DEX Aggregator on X Layer
-- **Analytics Agent** — Records every swap onchain via `XFlowAnalytics.sol` deployed on X Layer
-- **Real-time Dashboard** — Visualizes agent activity, payment chains, and DEX routes
+- **Analytics Agent** — Records only **successful** swaps onchain via `XFlowAnalytics.sol` deployed on X Layer
+- **Real-time Dashboard** — Visualizes agent activity, payment chains, and DEX routes at `/dashboard.html`
+
+## Why XFlow?
+
+> x402 kills subscriptions. Pay only when you use it.
+
+Traditional APIs require API keys, subscriptions, and manual billing. XFlow uses x402 — HTTP-native micropayments where AI agents pay $0.001 per call in USDC, automatically, from whichever chain is cheapest at that moment.
+
+**For AI Agents:**
+- No API keys needed
+- No subscriptions
+- Pay from any chain — SmartPaymentRouter handles the rest
+- Full onchain audit trail of every swap
 
 ## Supported Payment Networks (x402)
 
-| Chain | Network ID | USDC |
+| Chain | Network ID | USDC Address |
 |-------|-----------|------|
-| X Layer | `eip155:196` | `0x74b7...d22` |
-| Base | `eip155:8453` | `0x8335...913` |
-| Polygon | `eip155:137` | `0x3c49...359` |
-| Avalanche | `eip155:43114` | `0xB97E...6E` |
+| X Layer | `eip155:196` | `0x74b7f16337b8972027f6196a17a631ac6de26d22` |
+| Base | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Polygon | `eip155:137` | `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359` |
+| Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
 
 ## Onchain Contracts (X Layer)
 
-| Contract | Address |
-|----------|---------|
-| XFlowAnalytics | `0xf88A47a15fAa310E11c67568ef934141880d473e` |
+| Contract | Address | Explorer |
+|----------|---------|---------|
+| XFlowAnalytics | `0xf88A47a15fAa310E11c67568ef934141880d473e` | [View](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e) |
 
 ## Quick Start
 
@@ -82,9 +99,11 @@ docker compose up -d
 
 ```typescript
 import { createSmartPaymentFetch } from './src/smartPaymentRouter.js';
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 
-// Automatically selects cheapest chain with sufficient USDC
-const { fetchWithPayment, selectedNetwork } = await createSmartPaymentFetch(PRIVATE_KEY);
+// Step 1: Auto-selects cheapest chain with sufficient USDC balance
+const { fetchWithPayment } = await createSmartPaymentFetch(PRIVATE_KEY);
 
 const res = await fetchWithPayment('http://localhost:3010/swap', {
   method: 'POST',
@@ -96,7 +115,31 @@ const res = await fetchWithPayment('http://localhost:3010/swap', {
 });
 
 const data = await res.json();
-// data.result.data.result.tx → unsigned swap TX ready to sign & send
+const tx = data.result.data.result.tx;
+
+// Step 2: Agent signs & broadcasts the unsigned TX
+const walletClient = createWalletClient({ ... });
+const swapHash = await walletClient.sendTransaction({
+  to: tx.to, data: tx.data,
+  gas: BigInt(tx.gas),
+  gasPrice: BigInt(tx.gasPrice),
+  chainId: 196,
+});
+
+// Step 3: Confirm successful swap to Analytics Agent
+await fetch('http://localhost:3010/confirm', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    txHash: swapHash,
+    fromToken: 'USDC', toToken: 'WOKB',
+    fromAmount: '1.0', toAmount: '0.010417',
+    paymentNetwork: 'eip155:43114',
+    route: 'Uniswap V3',
+    riskLevel: 'LOW',
+    agentAddress: '0x...',
+  }),
+});
 ```
 
 ### 3. Manual x402 Payment (specific chain)
@@ -118,9 +161,9 @@ const res = await fetchWithPayment('http://localhost:3010/swap', {
 });
 ```
 
-## API
+## API Reference
 
-### `POST /swap` (x402 protected)
+### `POST /swap` (x402 protected · $0.001 USDC)
 
 Request:
 ```json
@@ -149,10 +192,27 @@ Response:
           "chainId": 196
         },
         "note": "Sign and send this TX to execute the swap on X Layer"
-      },
-      "analyticsTx": "0x..."
+      }
     }
   }
+}
+```
+
+### `POST /confirm` (free · call after successful swap)
+
+Records the swap onchain. Only called after Agent successfully broadcasts the swap TX.
+
+```json
+{
+  "txHash": "0x...",
+  "fromToken": "USDC",
+  "toToken": "WOKB",
+  "fromAmount": "1.0",
+  "toAmount": "0.010417",
+  "paymentNetwork": "eip155:43114",
+  "route": "Uniswap V3",
+  "riskLevel": "LOW",
+  "agentAddress": "0x..."
 }
 ```
 
@@ -169,36 +229,47 @@ Returns real-time analytics data from `XFlowAnalytics.sol`.
 ## Pipeline Flow
 
 ```
-1. Agent sends natural language swap request + x402 payment
-2. Smart Payment Router selects cheapest chain automatically  
-3. x402 payment settled by facilitator
-4. Orchestrator parses intent with Gemini 2.5 flash lite
-5. Risk Agent evaluates price impact & slippage
-6. DEX Agent fetches unsigned swap TX from OKX DEX Aggregator (X Layer)
-7. Analytics Agent records intent onchain (XFlowAnalytics.sol, X Layer)
-8. Agent receives unsigned TX → signs & broadcasts on X Layer → swap executed
+1. Agent sends natural language swap request + x402 payment ($0.001 USDC)
+2. Smart Payment Router checks USDC balances across 4 chains
+3. Cheapest chain selected by gas cost (USD-denominated)
+4. x402 payment settled by payai facilitator
+5. Orchestrator parses intent with Gemini 2.5 Flash Lite
+6. Risk Agent evaluates price impact & slippage → approves or rejects
+7. DEX Agent fetches unsigned swap TX from OKX DEX Aggregator (X Layer)
+8. Agent receives unsigned TX → signs & broadcasts on X Layer
+9. On success: Agent calls POST /confirm
+10. Analytics Agent records swap onchain (XFlowAnalytics.sol, X Layer)
 ```
 
 ## Environment Variables
 
 ```bash
-PRIVATE_KEY=0x...           # Wallet private key
+PRIVATE_KEY=0x...
 OKX_API_KEY=                # OKX Web3 Developer Portal
-OKX_SECRET_KEY=             # OKX Web3 Developer Portal
-OKX_PASSPHRASE=             # OKX Web3 Developer Portal
-OPENROUTER_API_KEY=         # Gemini 2.5 flash lite for intent parsing
+OKX_SECRET_KEY=
+OKX_PASSPHRASE=
+OPENROUTER_API_KEY=         # Gemini 2.5 Flash Lite via OpenRouter
 ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
 PAYEE_ADDRESS=0x...         # x402 payment recipient
 PORT=3010
 ```
 
+## Roadmap
+
+- [ ] Additional token pairs on X Layer (ETH, BTC, USDT)
+- [ ] More supported payment chains (SKALE Base, Abstract)
+- [ ] Volume-based pricing (high-frequency agents get discounts)
+- [ ] Multi-chain aggregated payment (split payment across chains)
+- [ ] Agent SDK package (`npm install xflow-sdk`)
+
 ## Built With
 
 - [x402 Protocol](https://x402.org) — HTTP-native micropayments
 - [OKX DEX Aggregator](https://web3.okx.com) — Best swap routes on X Layer
+- [OKX OnchainOS](https://web3.okx.com/onchain-os) — Onchain OS Skills
 - [payai facilitator](https://facilitator.payai.network) — x402 settlement
 - [X Layer](https://www.okx.com/xlayer) — EVM chain by OKX (eip155:196)
-- [Openrouter](https://openrouter.ai/) — LLM intent parsing
+- [OpenRouter](https://openrouter.ai/) — LLM gateway (Gemini 2.5 Flash Lite)
 - [viem](https://viem.sh) — EVM interactions
 
 ## License
