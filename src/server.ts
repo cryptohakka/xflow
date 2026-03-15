@@ -71,6 +71,29 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
 });
 
+// Confirm swap and record onchain (free - called after successful swap)
+app.post('/confirm', async (req: Request, res: Response) => {
+  try {
+    const { txHash, fromToken, toToken, fromAmount, toAmount, paymentNetwork, route, riskLevel, agentAddress } = req.body;
+    if (!txHash) return res.status(400).json({ error: 'txHash required' });
+
+    const { recordSwapOnchain } = await import('./analyticsAgent.js');
+    const analyticsTx = await recordSwapOnchain({
+      agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
+      fromToken: fromToken || 'USDC',
+      toToken: toToken || 'WOKB',
+      fromAmount: fromAmount || '0',
+      toAmount: toAmount || '0',
+      paymentNetwork: paymentNetwork || 'unknown',
+      route: route || 'unknown',
+      riskLevel: riskLevel || 'LOW',
+    });
+    res.json({ success: true, analyticsTx });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Dashboard data (free)
 app.get('/dashboard', async (_req: Request, res: Response) => {
   try {

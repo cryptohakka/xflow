@@ -41,8 +41,8 @@ if (pr) {
   console.log(`   💸 x402 paid: ${payment.network} | ${payment.transaction}`);
 }
 
-const data = await res.json();
-const tx = data.result?.data?.result?.tx;
+const txData = await res.json();
+const tx = txData.result?.data?.result?.tx;
 if (!tx) {
   console.error('❌ No TX data returned');
   console.log(JSON.stringify(data, null, 2));
@@ -78,3 +78,34 @@ console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${swapHash}`);
 
 const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
 console.log(`\n${receipt.status === 'success' ? '✅ Swap successful!' : '❌ Swap failed'}`);
+
+// Step 4: Analytics - only record if swap succeeded
+if (receipt.status === 'success') {
+  console.log('4️⃣ Recording swap onchain...');
+  const confirmRes = await fetch('http://localhost:3010/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      txHash: swapHash,
+      fromToken: txData.result?.data?.quote?.fromToken,
+      toToken: txData.result?.data?.quote?.toToken,
+      fromAmount: txData.result?.data?.quote?.fromAmount,
+      toAmount: txData.result?.data?.quote?.toAmount,
+      paymentNetwork: txData.result?.network,
+      route: txData.result?.data?.quote?.route,
+      riskLevel: txData.result?.data?.risk?.riskLevel,
+      agentAddress: account.address,
+    }),
+  });
+  const confirmData = await confirmRes.json();
+  if (confirmData.analyticsTx) {
+    console.log('   ✅ Analytics TX:', confirmData.analyticsTx);
+    console.log('   🔗 https://www.okx.com/web3/explorer/xlayer/tx/' + confirmData.analyticsTx);
+  }
+}
+
+// Step 4: Analytics - record successful swap
+const receipt2 = await (await import('viem')).createPublicClient({
+  chain: { id: 196, name: 'X Layer', nativeCurrency: { name: 'OKB', symbol: 'OKB', decimals: 18 }, rpcUrls: { default: { http: ['https://rpc.xlayer.tech'] } } },
+  transport: (await import('viem')).http('https://rpc.xlayer.tech'),
+}).waitForTransactionReceipt({ hash: '0x61564f0262d982be2b8d1c84cff7f39d48ae59e65ccb7615940ea6c9e0b3aec2' });

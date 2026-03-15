@@ -3,7 +3,6 @@
  * LLM-powered intent parsing + agent routing
  */
 import { handleDexQuery, getSwapQuote } from './dexAgent.js';
-import { recordSwapOnchain } from './analyticsAgent.js';
 import { handleRiskCheck } from './riskAgent.js';
 
 export type AgentType = 'dex' | 'unknown';
@@ -110,27 +109,14 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   // Step 4: DEX Agent
   const result = await handleDexQuery(query, userAddress, quote);
 
-  // Step 5: Analytics Agent - record onchain
-  let analyticsTx = '';
-  try {
-    analyticsTx = await recordSwapOnchain({
-      agentAddress: userAddress || options.privateKey,
-      fromToken: quote.fromToken,
-      toToken: quote.toToken,
-      fromAmount: quote.fromAmount,
-      toAmount: quote.toAmount,
-      paymentNetwork: preferredNetwork,
-      route: quote.route,
-      riskLevel: risk.riskLevel,
-    });
-  } catch (e: any) {
-    console.warn('Analytics recording failed:', e.message);
-  }
-
   return {
     intent,
     network: preferredNetwork,
     transaction: '',
-    data: { status: 'approved', risk, quote, result, analyticsTx },
+    data: {
+      status: 'approved', risk, quote, result,
+      // Call POST /confirm with swap txHash after successful broadcast
+      confirmEndpoint: '/confirm',
+    },
   };
 }
