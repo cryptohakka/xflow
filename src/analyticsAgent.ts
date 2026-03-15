@@ -20,8 +20,11 @@ const ANALYTICS_ABI = parseAbi([
 ]);
 
 function loadEnv(): Record<string, string> {
+  // process.envを優先（Docker環境）
+  if (process.env.PRIVATE_KEY) return process.env as Record<string, string>;
   try {
-    return readFileSync('/home/agent/xflow/.env', 'utf-8')
+    const envPath = '/home/agent/xflow/.env';
+    return readFileSync(envPath, 'utf-8')
       .split('\n').reduce((acc, line) => {
         const [k, ...v] = line.split('=');
         if (k && v.length) acc[k.trim()] = v.join('=').trim();
