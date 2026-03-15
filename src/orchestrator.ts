@@ -3,6 +3,7 @@
  * LLM-powered intent parsing + agent routing
  */
 import { handleDexQuery, getSwapQuote } from './dexAgent.js';
+import { recordFailedSwapOnchain } from './analyticsAgent.js';
 import { handleRiskCheck } from './riskAgent.js';
 
 export type AgentType = 'dex' | 'unknown';
@@ -92,9 +93,25 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     priceImpact: quote.priceImpact,
     estimateGasFee: quote.estimateGasFee,
     route: quote.route,
+    isHoneyPot: (quote as any).isHoneyPot,
+    taxRate: (quote as any).taxRate,
+    toTokenUnitPrice: (quote as any).toTokenUnitPrice,
   });
 
   if (!risk.approved) {
+    // Record rejected swap onchain
+    try {
+      await recordFailedSwapOnchain({
+        agentAddress: userAddress || '0x0000000000000000000000000000000000000000',
+        fromToken: quote.fromToken,
+        toToken: quote.toToken,
+        fromAmount: quote.fromAmount,
+        reason: 'risk_rejected',
+        paymentNetwork: preferredNetwork,
+      });
+    } catch (e: any) {
+      console.warn('Failed to record rejection:', e.message);
+    }
     return {
       intent,
       network: preferredNetwork,

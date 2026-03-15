@@ -91,21 +91,39 @@ export async function getDashboardData() {
 
   const publicClient = createPublicClient({ chain: xlayer, transport: http('https://rpc.xlayer.tech') });
 
-  const [totalSwaps, recentSwaps] = await Promise.all([
+  const FAILED_ABI = parseAbi([
+    'function totalFailed() view returns (uint256)',
+    'function getRecentFailedSwaps(uint256 count) view returns ((address agent, string fromToken, string toToken, uint256 fromAmount, string reason, string paymentNetwork, uint256 timestamp)[])',
+    'function getSuccessRate() view returns (uint256 numerator, uint256 denominator)',
+  ]);
+
+  const [totalSwaps, totalFailed, recentSwaps, recentFailed, successRate] = await Promise.all([
     publicClient.readContract({ address: contractAddress, abi: ANALYTICS_ABI, functionName: 'totalSwaps' }),
+    publicClient.readContract({ address: contractAddress, abi: FAILED_ABI, functionName: 'totalFailed' }),
     publicClient.readContract({ address: contractAddress, abi: ANALYTICS_ABI, functionName: 'getRecentSwaps', args: [10n] }),
+    publicClient.readContract({ address: contractAddress, abi: FAILED_ABI, functionName: 'getRecentFailedSwaps', args: [5n] }),
+    publicClient.readContract({ address: contractAddress, abi: FAILED_ABI, functionName: 'getSuccessRate' }),
   ]);
 
   const networkCount: Record<string, number> = {};
   const routeCount: Record<string, number> = {};
+  const reasonCount: Record<string, number> = {};
 
   for (const swap of recentSwaps as any[]) {
     networkCount[swap.paymentNetwork] = (networkCount[swap.paymentNetwork] || 0) + 1;
     routeCount[swap.route] = (routeCount[swap.route] || 0) + 1;
   }
+  for (const f of recentFailed as any[]) {
+    reasonCount[f.reason] = (reasonCount[f.reason] || 0) + 1;
+  }
+
+  const [numerator, denominator] = successRate as [bigint, bigint];
+  const successRatePct = denominator > 0n ? (Number(numerator) / Number(denominator) * 100).toFixed(1) : '100.0';
 
   return {
     totalSwaps: totalSwaps.toString(),
+    totalFailed: totalFailed.toString(),
+    successRate: successRatePct + '%',
     recentSwaps: (recentSwaps as any[]).map(s => ({
       agent: s.agent,
       fromToken: s.fromToken,
@@ -117,7 +135,58 @@ export async function getDashboardData() {
       riskLevel: ['LOW', 'MEDIUM', 'HIGH'][s.riskLevel],
       timestamp: new Date(Number(s.timestamp) * 1000).toISOString(),
     })),
+    recentFailed: (recentFailed as any[]).map(f => ({
+      agent: f.agent,
+      fromToken: f.fromToken,
+      toToken: f.toToken,
+      fromAmount: (Number(f.fromAmount) / 1e6).toFixed(6),
+      reason: f.reason,
+      paymentNetwork: f.paymentNetwork,
+      timestamp: new Date(Number(f.timestamp) * 1000).toISOString(),
+    })),
     networkBreakdown: networkCount,
     routeBreakdown: routeCount,
+    reasonBreakdown: reasonCount,
   };
+}
+
+export interface FailedSwapInput {
+  agentAddress: string;
+  fromToken: string;
+  toToken: string;
+  fromAmount: string;
+  reason: 'risk_rejected' | 'broadcast_failed';
+  paymentNetwork: string;
+}
+
+export async function recordFailedSwapOnchain(input: FailedSwapInput): Promise<string> {
+  const env = loadEnv();
+  const privateKey = env.PRIVATE_KEY as `0x${string}`;
+  const contractAddress = (env.ANALYTICS_CONTRACT || '0xc5808b9D5b5403802d8276A52bbf53e32C53e998') as `0x${string}`;
+
+  const account = privateKeyToAccount(privateKey);
+  const walletClient = createWalletClient({ account, chain: xlayer, transport: http('https://rpc.xlayer.tech') });
+
+  const fromAmountRaw = BigInt(Math.floor(parseFloat(input.fromAmount) * 1e6));
+
+  console.log(`📊 Analytics Agent: recording failed swap (${input.reason})...`);
+
+  const hash = await walletClient.writeContract({
+    address: contractAddress,
+    abi: parseAbi([
+      'function recordFailedSwap(address agent, string fromToken, string toToken, uint256 fromAmount, string reason, string paymentNetwork) external',
+    ]),
+    functionName: 'recordFailedSwap',
+    args: [
+      input.agentAddress as `0x${string}`,
+      input.fromToken,
+      input.toToken,
+      fromAmountRaw,
+      input.reason,
+      input.paymentNetwork,
+    ],
+  });
+
+  console.log(`   ✅ Recorded! TX: ${hash}`);
+  return hash;
 }

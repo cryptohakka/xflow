@@ -78,6 +78,9 @@ export async function getSwapQuote(req: SwapRequest) {
     route: q.dexRouterList[0]?.dexProtocol?.dexName,
     priceImpact: q.priceImpactPercent + '%',
     estimateGasFee: q.estimateGasFee,
+    isHoneyPot: q.toToken?.isHoneyPot || false,
+    taxRate: q.toToken?.taxRate || '0',
+    toTokenUnitPrice: q.toToken?.tokenUnitPrice || '0',
   };
 }
 

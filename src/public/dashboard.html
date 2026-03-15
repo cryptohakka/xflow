@@ -34,7 +34,7 @@
   .bar-track { height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
   .bar-fill { height:100%; border-radius:3px; transition:width 1s ease; }
   .swap-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  .swap-row { display:grid; grid-template-columns:2fr 1fr 1fr 1.5fr 1fr 1.5fr; padding:0.9rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.85rem; align-items:center; transition:background 0.2s; }
+  .swap-row { display:grid; grid-template-columns:2fr 1fr 1fr 1.5fr 1fr 1fr 1.5fr; padding:0.9rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.85rem; align-items:center; transition:background 0.2s; }
   .swap-row:hover { background:rgba(0,212,255,0.03); }
   .swap-row.header { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); }
   .swap-row:last-child { border-bottom:none; }
@@ -83,6 +83,7 @@ function render(data) {
       <div class="stat-card"><div class="stat-label">TOTAL VOLUME</div><div class="stat-value">$${totalVolume.toFixed(4)}</div><div class="stat-sub">USDC across all agents</div></div>
       <div class="stat-card"><div class="stat-label">UNIQUE AGENTS</div><div class="stat-value">${uniqueAgents}</div><div class="stat-sub">Active AI agents</div></div>
       <div class="stat-card"><div class="stat-label">PAYMENT NETWORKS</div><div class="stat-value">${networks.length}</div><div class="stat-sub">Chains used for x402</div></div>
+      <div class="stat-card"><div class="stat-label">SUCCESS RATE</div><div class="stat-value" style="color:${parseFloat(data.successRate)>=90?'var(--green)':parseFloat(data.successRate)>=70?'var(--gold)':'var(--red)'}">${data.successRate||'100%'}</div><div class="stat-sub">${data.totalFailed||0} rejected by Risk Agent</div></div>
     </div>
     <div class="section">
       <div class="section-title">PAYMENT NETWORK BREAKDOWN</div>
@@ -106,20 +107,38 @@ function render(data) {
       </div>
     </div>
     <div class="section">
-      <div class="section-title">RECENT SWAP ACTIVITY</div>
+      <div class="section-title">RECENT AGENT ACTIVITY</div>
       <div class="swap-table">
-        <div class="swap-row header"><span>AGENT</span><span>FROM</span><span>TO</span><span>PAYMENT CHAIN</span><span>RISK</span><span>TIME</span></div>
+        <div class="swap-row header"><span>AGENT</span><span>FROM</span><span>TO</span><span>PAYMENT CHAIN</span><span>RISK</span><span>STATUS</span><span>TIME</span></div>
         ${data.recentSwaps.length===0
           ? '<div style="padding:2rem;text-align:center;color:var(--dim);font-family:monospace">No swaps recorded yet</div>'
-          : data.recentSwaps.slice().reverse().map(s => `
+          : [
+            ...data.recentSwaps.map(s => ({...s, _type:'success'})),
+            ...(data.recentFailed||[]).map(s => ({...s, _type:'failed'}))
+          ].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+           .slice(0,15)
+           .map(s => s._type === 'success' ? `
             <div class="swap-row">
               <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
               <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
               <span style="color:var(--green)">${parseFloat(s.toAmount).toFixed(6)} ${s.toToken}</span>
               <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
               <span><span class="risk-badge risk-${s.riskLevel}">${s.riskLevel}</span></span>
+              <span style="color:var(--green);font-size:0.75rem">✅ Success</span>
               <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
-            </div>`).join('')}
+            </div>` : `
+            <div class="swap-row" style="background:rgba(255,71,87,0.03)">
+              <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
+              <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
+              <span style="color:var(--dim)">—</span>
+              <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
+              <span><span class="risk-badge risk-HIGH">HIGH</span></span>
+              <span style="color:var(--red);font-size:0.72rem">${
+                s.reason === 'risk_rejected' ? '⛔ Risk Rejected' : '❌ Broadcast Failed'
+              }</span>
+              <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
+            </div>`
+          ).join('')}
       </div>
     </div>`;
 }
