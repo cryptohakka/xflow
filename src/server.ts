@@ -24,20 +24,23 @@ const x402Server = new x402ResourceServer(facilitator, {
 })
   .register('eip155:196', evmScheme)
   .register('eip155:8453', evmScheme)
-  .register('eip155:137', evmScheme);
+  .register('eip155:137', evmScheme)
+  .register('eip155:43114', evmScheme);
 
 const USDC_ADDRESSES: Record<string, string> = {
   'eip155:196':  '0x74b7f16337b8972027f6196a17a631ac6de26d22', // X Layer
   'eip155:8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base
   'eip155:137':  '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // Polygon
+  'eip155:43114': '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', // Avalanche
 };
 const USDC_EIP712: Record<string, { name: string; version: string }> = {
   'eip155:196':  { name: 'USD Coin', version: '2' },
   'eip155:8453': { name: 'USD Coin', version: '2' },
   'eip155:137':  { name: 'USD Coin', version: '2' },
+  'eip155:43114': { name: 'USD Coin', version: '2' },
 };
 
-const NETWORKS = ['eip155:196', 'eip155:8453', 'eip155:137'];
+const NETWORKS = ['eip155:196', 'eip155:8453', 'eip155:137', 'eip155:43114'];
 
 const paymentConfig = {
   'POST /swap': {
