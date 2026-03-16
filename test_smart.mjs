@@ -17,7 +17,12 @@ const { fetchWithPayment, selectedNetwork, allBalances } = await createSmartPaym
 const res = await fetchWithPayment('http://localhost:3010/swap', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: 'swap 0.01 USDC to OKB', userAddress: privateKeyToAccount(env.PRIVATE_KEY).address }),
+  body: JSON.stringify({
+    query: 'swap 0.01 USDC to OKB',
+    userAddress: privateKeyToAccount(env.PRIVATE_KEY).address,
+    fromTokenAddress: '0x74b7f16337b8972027f6196a17a631ac6de26d22', // USDC on X Layer
+    toTokenAddress: '0xe538905cf8410324e03a5a23c1c177a474d59b2b',   // WOKB on X Layer
+  }),
 });
 
 const pr = res.headers.get('payment-response');
@@ -28,6 +33,7 @@ if (pr) {
 }
 
 const txData = await res.json();
+console.log('RAW txData:', JSON.stringify(txData).slice(0, 200));
 console.log(`\n✅ Result: ${txData.result?.data?.status}`);
 console.log(`   Risk: ${txData.result?.data?.risk?.riskLevel}`);
 console.log(`   Quote: ${txData.result?.data?.quote?.fromAmount} USDC → ${txData.result?.data?.quote?.toAmount} WOKB`);

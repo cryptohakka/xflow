@@ -3,6 +3,7 @@
  * LLM-powered intent parsing + agent routing
  */
 import { handleDexQuery, getSwapQuote } from './dexAgent.js';
+import { resolveToken, getAvailableTokens } from './tokenResolver.js';
 import { recordFailedSwapOnchain } from './analyticsAgent.js';
 import { handleRiskCheck } from './riskAgent.js';
 
@@ -62,10 +63,12 @@ export interface OrchestratorOptions {
   privateKey: `0x${string}`;
   preferredNetwork?: string;
   userAddress?: string;
+  fromTokenAddress?: string;
+  toTokenAddress?: string;
 }
 
 export async function orchestrate(query: string, options: OrchestratorOptions) {
-  const { preferredNetwork = 'eip155:196', userAddress } = options;
+  const { preferredNetwork = 'eip155:196', userAddress, fromTokenAddress, toTokenAddress } = options;
 
   // Step 1: LLMでintent解析
   console.log(`🧠 Orchestrator parsing intent...`);
@@ -76,16 +79,43 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     return { intent, network: preferredNetwork, transaction: '', data: { status: 'unrecognized intent' } };
   }
 
-  // Step 2: まずquoteを取得してrisk評価
+  // Step 2: トークンアドレス解決
+  const fromSymbol = intent.fromToken || 'USDC';
+  const toSymbol = intent.toToken || 'WOKB';
+
+  const fromResolved = await resolveToken(fromTokenAddress || fromSymbol);
+  const toResolved = await resolveToken(toTokenAddress || toSymbol);
+
+  if (!fromResolved.address || !toResolved.address) {
+    const missing = [];
+    if (!fromResolved.address) missing.push(fromSymbol);
+    if (!toResolved.address) missing.push(toSymbol);
+    const available = await getAvailableTokens();
+    return {
+      intent, network: preferredNetwork, transaction: '',
+      data: {
+        status: 'token_not_found',
+        message: `Token(s) not found on X Layer: ${missing.join(', ')}`,
+        suggestion: 'Please provide tokenContractAddress or use availableTokens',
+        availableTokens: available,
+      }
+    };
+  }
+
+  console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}, ${toSymbol}=${toResolved.source}`);
+
+  // Step 3: quoteを取得してrisk評価
   console.log(`📊 Getting quote for risk evaluation...`);
   const quote = await getSwapQuote({
-    fromToken: intent.fromToken || 'USDC',
-    toToken: intent.toToken || 'WOKB',
+    fromToken: fromSymbol,
+    toToken: toSymbol,
     amount: intent.amount || '1.0',
     userAddress: userAddress || '0x0000000000000000000000000000000000000001',
+    fromTokenAddress: fromResolved.address,
+    toTokenAddress: toResolved.address,
   });
 
-  // Step 3: Risk Agent
+  // Step 4: Risk Agent
   const risk = await handleRiskCheck({
     fromToken: quote.fromToken,
     toToken: quote.toToken,
@@ -123,7 +153,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   // Rate limit: 1 req/sec
   await new Promise(r => setTimeout(r, 1100));
 
-  // Step 4: DEX Agent
+  // Step 5: DEX Agent
   const result = await handleDexQuery(query, userAddress, quote);
 
   return {

@@ -120,11 +120,12 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
 
 // Main swap endpoint (x402 protected)
 app.post('/swap', async (req: Request, res: Response) => {
-  const { query, userAddress } = req.body;
+  const { query, userAddress, fromTokenAddress, toTokenAddress } = req.body;
+  console.log('[DEBUG] body:', JSON.stringify(req.body).slice(0,200));
+  console.log('[DEBUG] req.body keys:', Object.keys(req.body));
+  console.log('[DEBUG] fromTokenAddress:', fromTokenAddress);
 
-  if (!query) {
-    return res.status(400).json({ error: 'query is required' });
-  }
+  if (!query) return res.status(400).json({ error: 'query is required' });
 
   try {
     const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
@@ -132,6 +133,8 @@ app.post('/swap', async (req: Request, res: Response) => {
       privateKey,
       preferredNetwork: 'eip155:196',
       userAddress,
+      fromTokenAddress,
+      toTokenAddress,
     });
     res.json({ success: true, result });
   } catch (e: any) {
