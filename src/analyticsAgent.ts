@@ -105,6 +105,21 @@ export async function getDashboardData() {
     publicClient.readContract({ address: contractAddress, abi: FAILED_ABI, functionName: 'getSuccessRate' }),
   ]);
 
+  // ── totalVolume: コントラクトに関数があれば使う、なければ recentSwaps の合計で代用 ──
+  let totalVolume: string;
+  try {
+    const vol = await publicClient.readContract({
+      address: contractAddress,
+      abi: parseAbi(['function totalVolume() view returns (uint256)']),
+      functionName: 'totalVolume',
+    }) as bigint;
+    totalVolume = (Number(vol) / 1e6).toFixed(6);
+  } catch {
+    totalVolume = (recentSwaps as any[])
+      .reduce((sum, s) => sum + Number(s.fromAmount) / 1e6, 0)
+      .toFixed(6);
+  }
+
   const networkCount: Record<string, number> = {};
   const routeCount: Record<string, number> = {};
   const reasonCount: Record<string, number> = {};
@@ -118,11 +133,14 @@ export async function getDashboardData() {
   }
 
   const [numerator, denominator] = successRate as [bigint, bigint];
-  const successRatePct = denominator > 0n ? (Number(numerator) / Number(denominator) * 100).toFixed(1) : '100.0';
+  const successRatePct = denominator > 0n
+    ? (Number(numerator) / Number(denominator) * 100).toFixed(1)
+    : '100.0';
 
   return {
     totalSwaps: totalSwaps.toString(),
     totalFailed: totalFailed.toString(),
+    totalVolume,
     successRate: successRatePct + '%',
     recentSwaps: (recentSwaps as any[]).map(s => ({
       agent: s.agent,
@@ -134,6 +152,7 @@ export async function getDashboardData() {
       route: s.route,
       riskLevel: ['LOW', 'MEDIUM', 'HIGH'][s.riskLevel],
       timestamp: new Date(Number(s.timestamp) * 1000).toISOString(),
+      txHash: s.txHash || undefined,
     })),
     recentFailed: (recentFailed as any[]).map(f => ({
       agent: f.agent,
@@ -143,6 +162,7 @@ export async function getDashboardData() {
       reason: f.reason,
       paymentNetwork: f.paymentNetwork,
       timestamp: new Date(Number(f.timestamp) * 1000).toISOString(),
+      txHash: f.txHash || undefined,
     })),
     networkBreakdown: networkCount,
     routeBreakdown: routeCount,
