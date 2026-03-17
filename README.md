@@ -81,12 +81,11 @@ External Agent / User
 
 ## Key Features
 
-- **Smart Payment Router** — Checks USDC balances across all supported chains, automatically selects the cheapest chain by gas cost (USD-denominated). No need to manually choose which chain to pay from.
-- **x402 Payment Adapter** — Any x402-compatible agent can call XFlow regardless of which chain they hold USDC on.
+- **Smart Payment Router** — Checks USDC balances across all supported chains and automatically selects the cheapest by gas cost. Handles the x402 402-handshake transparently — any x402-compatible agent can call XFlow without worrying about which chain to pay from.
 - **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.5 Flash Lite (OpenRouter).
 - **Risk Agent** — Evaluates price impact, amount size, and route quality before execution. Rejects HIGH risk swaps automatically. See [Risk Agent Logic](#risk-agent-logic).
 - **DEX Agent** — Fetches unsigned swap TX data via OKX OnchainOS DEX Aggregator API on X Layer.
-- **Analytics Agent** — Records only **successful** swaps onchain via `XFlowAnalytics.sol` deployed on X Layer.
+- **Analytics Agent** — Records all swap activity onchain via `XFlowAnalytics.sol` on X Layer — successful swaps and Risk Agent rejections both captured.
 - **ClawdMint A2A** — After each confirmed swap, XFlow autonomously calls ClawdMint via Agent-to-Agent (A2A) protocol with x402 micropayment. Returns TX explanation and next action suggestions.
 - **Real-time Dashboard** — Visualizes agent activity, payment chains, DEX routes, cumulative volume, and TX hash explorer links.
 
