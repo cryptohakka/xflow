@@ -21,6 +21,11 @@ const KNOWN_TOKENS: Record<string, string> = {
   'CRVUSD': '0xda8f4eb4503acf5dec5420523637bb5b33a846f6',
 };
 
+// アドレス→シンボルの逆引きマップ
+const ADDRESS_TO_SYMBOL: Record<string, string> = Object.fromEntries(
+  Object.entries(KNOWN_TOKENS).map(([sym, addr]) => [addr.toLowerCase(), sym])
+);
+
 // APIキャッシュ（バックグラウンドで更新）
 let apiCache: Record<string, string> = {};
 let cacheLoaded = false;
@@ -84,7 +89,9 @@ export async function resolveToken(symbolOrAddress: string): Promise<{
 }> {
   // アドレス直接指定
   if (symbolOrAddress.startsWith('0x') && symbolOrAddress.length === 42) {
-    return { address: symbolOrAddress, source: 'address' };
+    const symbol = ADDRESS_TO_SYMBOL[symbolOrAddress.toLowerCase()] || 
+                   Object.entries(apiCache).find(([,v]) => v.toLowerCase() === symbolOrAddress.toLowerCase())?.[0];
+    return { address: symbolOrAddress, source: 'address', symbol };
   }
 
   const upper = symbolOrAddress.toUpperCase();

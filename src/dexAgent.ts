@@ -45,34 +45,47 @@ const TOKENS: Record<string, string> = {
 };
 
 export interface SwapRequest {
-  fromToken: string;  // e.g. "USDC"
-  toToken: string;    // e.g. "OKB"
-  amount: string;     // human readable e.g. "1.0"
+  fromToken: string;
+  toToken: string;
+  amount: string;
   userAddress: string;
-  slippage?: string;  // default "0.01" = 1%
+  slippage?: string;
+  fromTokenAddress?: string;
+  toTokenAddress?: string;
+  fromTokenSymbol?: string;
 }
 
 /**
  * Get swap quote (no execution)
  */
 export async function getSwapQuote(req: SwapRequest) {
-  const fromAddr = TOKENS[req.fromToken.toUpperCase()] || req.fromToken;
-  const toAddr   = TOKENS[req.toToken.toUpperCase()]   || req.toToken;
+  const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
+  const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken||'').toUpperCase()]   || req.toToken   || '';
   
-  // USDC decimals = 6, others = 18
-  const decimals = req.fromToken.toUpperCase() === 'USDC' ? 6 : 18;
+  // decimals: USDC/USDT = 6, others = 18
+  const stablecoins = ['USDC', 'USDT', 'USDG', 'DAI', 'CRVUSD'];
+  const fromSym = (req.fromTokenSymbol || req.fromToken || '').toUpperCase();
+  const decimals = stablecoins.includes(fromSym) ? 6 : 18;
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
 
   const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}`;
   const path = `/api/v6/dex/aggregator/quote?${query}`;
-  const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path) });
+  const controller = new AbortController(); setTimeout(() => controller.abort(), 8000); const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path), signal: controller.signal });
   const json = await res.json() as any;
   if (json.code !== '0') throw new Error(`OKX quote error: ${json.msg}`);
   
   const q = json.data[0];
+  const addrToSymbol: Record<string, string> = {
+    '0x74b7f16337b8972027f6196a17a631ac6de26d22': 'USDC',
+    '0xe538905cf8410324e03a5a23c1c177a474d59b2b': 'WOKB',
+    '0x5a77f1443d16ee5761d310e38b62f77f726bc71c': 'WETH',
+    '0x1e4a5963abfd975d8c9021ce480b42188849d41d': 'USDT',
+  };
+  const resolvedFromSymbol = (req.fromTokenAddress && addrToSymbol[req.fromTokenAddress.toLowerCase()]) || req.fromToken.toUpperCase();
+  const resolvedToSymbol   = (req.toTokenAddress   && addrToSymbol[req.toTokenAddress.toLowerCase()])   || req.toToken.toUpperCase();
   return {
-    fromToken: req.fromToken.toUpperCase(),
-    toToken: req.toToken.toUpperCase(),
+    fromToken: resolvedFromSymbol,
+    toToken: resolvedToSymbol,
     fromAmount: req.amount,
     toAmount: (parseInt(q.toTokenAmount) / 10 ** parseInt(q.toToken.decimal)).toFixed(6),
     route: q.dexRouterList[0]?.dexProtocol?.dexName,
@@ -81,24 +94,38 @@ export async function getSwapQuote(req: SwapRequest) {
     isHoneyPot: q.toToken?.isHoneyPot || false,
     taxRate: q.toToken?.taxRate || '0',
     toTokenUnitPrice: q.toToken?.tokenUnitPrice || '0',
+    fromTokenAddress: fromAddr,
+    toTokenAddress: toAddr,
   };
 }
 
 /**
  * Get swap TX data (unsigned) — agent calls this, user signs & executes
  */
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 export async function getSwapTxData(req: SwapRequest) {
-  const fromAddr = TOKENS[req.fromToken.toUpperCase()] || req.fromToken;
-  const toAddr   = TOKENS[req.toToken.toUpperCase()]   || req.toToken;
+  const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
+  const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken||'').toUpperCase()]   || req.toToken   || '';
   
-  const decimals = req.fromToken.toUpperCase() === 'USDC' ? 6 : 18;
+  const stablecoinsForTx = ['USDC', 'USDT', 'USDG', 'DAI', 'CRVUSD']; const decimals = stablecoinsForTx.includes(req.fromToken.toUpperCase()) ? 6 : 18;
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
-  const slippage = req.slippage || '0.01';
+  const slippage = req.slippage || '0.5';
 
+  await sleep(1100);
   console.log(`[DEX] getSwapTxData amount=${req.amount} amountRaw=${amountRaw}`);
-  const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&userWalletAddress=${req.userAddress}&slippagePercent=${slippage}`;
+  const safeFromAddr = fromAddr || undefined;
+  const safeToAddr   = toAddr   || undefined;
+  const params = new URLSearchParams({
+    chainIndex: CHAIN_INDEX,
+    amount: amountRaw,
+    userWalletAddress: req.userAddress,
+    slippagePercent: slippage,
+  });
+  if (safeFromAddr) params.set('fromTokenAddress', safeFromAddr);
+  if (safeToAddr)   params.set('toTokenAddress',   safeToAddr);
+  const query = params.toString();
   const path = `/api/v6/dex/aggregator/swap?${query}`;
-  const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path) });
+  const controller = new AbortController(); setTimeout(() => controller.abort(), 8000); const res = await fetch(`https://www.okx.com${path}`, { headers: makeHeaders(path), signal: controller.signal });
   const json = await res.json() as any;
   if (json.code !== '0') throw new Error(`OKX swap error: ${json.msg}`);
 
@@ -134,12 +161,15 @@ export async function handleDexQuery(query: string, userAddress?: string, existi
 
   if (isSwap && userAddress) {
     const req: SwapRequest = {
-      fromToken: existingQuote?.fromToken || (okbToUsdc ? 'WOKB' : 'USDC'),
-      toToken:   existingQuote?.toToken   || (okbToUsdc ? 'USDC' : 'WOKB'),
+      fromToken: existingQuote?.fromToken || 'USDC',
+      toToken:   existingQuote?.toToken   || 'WOKB',
       amount:    existingQuote?.fromAmount || '1.0',
       userAddress,
+      // アドレスを優先（Option C: シンボルより信頼性が高い）
+      fromTokenAddress: existingQuote?.fromTokenAddress || existingQuote?.fromToken,
+      toTokenAddress:   existingQuote?.toTokenAddress   || existingQuote?.toToken,
     };
-    console.log(`[DEX] getSwapTxData amount=${req.amount}`);
+    console.log(`[DEX] getSwapTxData from=${req.fromTokenAddress?.slice(0,10)} to=${req.toTokenAddress?.slice(0,10)} amount=${req.amount}`);
     return getSwapTxData(req);
   }
 

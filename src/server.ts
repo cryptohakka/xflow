@@ -87,9 +87,14 @@ app.get('/health', (_req: Request, res: Response) => {
 // Confirm swap and record onchain (x402 protected - $0.001 on success)
 app.post('/confirm', async (req: Request, res: Response) => {
   try {
-    const { txHash, fromToken, toToken, fromAmount, toAmount, paymentNetwork, route, riskLevel, agentAddress } = req.body;
+    const {
+      txHash, fromToken, toToken, fromAmount, toAmount,
+      paymentNetwork, route, riskLevel, agentAddress,
+    } = req.body;
+
     if (!txHash) return res.status(400).json({ error: 'txHash required' });
 
+    // Step 1: 既存のanalytics記録（変更なし）
     const { recordSwapOnchain } = await import('./analyticsAgent.js');
     const analyticsTx = await recordSwapOnchain({
       agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
@@ -101,7 +106,31 @@ app.post('/confirm', async (req: Request, res: Response) => {
       route: route || 'unknown',
       riskLevel: riskLevel || 'LOW',
     });
-    res.json({ success: true, analyticsTx });
+
+    // Step 2: ClawdMint A2A分析（x402自動決済）
+    let clawdmint = null;
+    try {
+      const { analyzeSwapWithClawdMint } = await import('./clawdmintA2A.js');
+      const analysis = await analyzeSwapWithClawdMint({
+        txHash,
+        fromToken: fromToken || 'USDC',
+        toToken: toToken || 'WOKB',
+        fromAmount: fromAmount || '0',
+        toAmount: toAmount || '0',
+        chainId: 196,
+      });
+      clawdmint = {
+        txExplanation: analysis.txExplanation,
+        nextActions: analysis.nextActions,
+        paidWithX402: analysis.paidWithX402,
+        settlements: analysis.settlements,
+        note: 'Powered by ClawdMint via A2A + x402',
+      };
+    } catch (e: any) {
+      console.warn('[Confirm] ClawdMint analysis failed:', e.message);
+    }
+
+    res.json({ success: true, analyticsTx, clawdmint });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }

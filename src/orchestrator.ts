@@ -36,24 +36,30 @@ async function parseIntent(query: string): Promise<ParsedIntent> {
           content: `Parse this DeFi swap request and return JSON only, no explanation:
 "${query}"
 
-Return: {"action":"swap"|"quote"|"unknown","fromToken":"USDC"|"WOKB"|"OKB"|null,"toToken":"USDC"|"WOKB"|"OKB"|null,"amount":"number as string"|null}
+Rules:
+- fromToken = the token being SOLD/SENT (appears right after "swap")
+- toToken = the token being BOUGHT/RECEIVED (appears after "to")
+- Example: "swap 1 WETH to USDC" → fromToken=WETH, toToken=USDC
 
-Supported tokens on X Layer: USDC, WOKB, OKB (WOKB=OKB)`
+Return: {"action":"swap"|"quote"|"unknown","fromToken":"USDC"|"WOKB"|"OKB"|"WETH"|null,"toToken":"USDC"|"WOKB"|"OKB"|"WETH"|null,"amount":"number as string"|null}
+
+Supported tokens on X Layer: USDC, WOKB, OKB (WOKB=OKB), WETH`
         }],
       }),
     });
     const data = await res.json() as any;
     const text = data.choices[0].message.content.trim();
-    return JSON.parse(text);
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim(); return JSON.parse(cleaned);
   } catch {
     // fallback to keyword matching
     const isSwap = /swap|buy|sell|trade/i.test(query);
-    const okbToUsdc = /okb.*usdc|wokb.*usdc/i.test(query);
     const amountMatch = query.match(/[\d.]+/);
+    // fallback: queryからシンボルを正規表現で抽出
+    const swapMatch = query.match(/swap\s+[\d.]+\s+(\w+)\s+to\s+(\w+)/i);
     return {
       action: isSwap ? 'swap' : 'quote',
-      fromToken: okbToUsdc ? 'WOKB' : 'USDC',
-      toToken: okbToUsdc ? 'USDC' : 'WOKB',
+      fromToken: swapMatch?.[1]?.toUpperCase() || 'USDC',
+      toToken: swapMatch?.[2]?.toUpperCase() || 'WOKB',
       amount: amountMatch?.[0] || '1.0',
     };
   }
@@ -80,11 +86,18 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   }
 
   // Step 2: トークンアドレス解決
-  const fromSymbol = intent.fromToken || 'USDC';
-  const toSymbol = intent.toToken || 'WOKB';
+  // fromTokenAddress/toTokenAddressが直接指定されていればLLM解析のfromToken/toTokenを無視
+  const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC');
+  const toResolved = await resolveToken(toTokenAddress || intent.toToken || 'WOKB');
+  // アドレスが直接指定された場合はそのシンボルを優先
+  const fromSymbol = fromTokenAddress?.length
+    ? (fromResolved.symbol || 'TOKEN')
+    : (intent.fromToken || 'USDC');
+  const toSymbol = toTokenAddress?.length
+    ? (toResolved.symbol || 'TOKEN')
+    : (intent.toToken || 'WOKB');
 
-  const fromResolved = await resolveToken(fromTokenAddress || fromSymbol);
-  const toResolved = await resolveToken(toTokenAddress || toSymbol);
+  console.log(`🔍 Tokens: ${fromSymbol}(${fromResolved.address?.slice(0,8)}...) → ${toSymbol}(${toResolved.address?.slice(0,8)}...)`);
 
   if (!fromResolved.address || !toResolved.address) {
     const missing = [];
@@ -102,17 +115,19 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}, ${toSymbol}=${toResolved.source}`);
+  console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}(${fromResolved.address?.slice(0,8)}), ${toSymbol}=${toResolved.source}(${toResolved.address?.slice(0,8)})`);
 
   // Step 3: quoteを取得してrisk評価
-  console.log(`📊 Getting quote for risk evaluation...`);
+  // fromSymbol/toSymbolをアドレスから正しく上書き
+  console.log(`📊 Getting quote for risk evaluation... ${fromSymbol} → ${toSymbol}`);
   const quote = await getSwapQuote({
     fromToken: fromSymbol,
     toToken: toSymbol,
     amount: intent.amount || '1.0',
     userAddress: userAddress || '0x0000000000000000000000000000000000000001',
-    fromTokenAddress: fromResolved.address,
-    toTokenAddress: toResolved.address,
+    fromTokenAddress: fromResolved.address || undefined,
+    toTokenAddress: toResolved.address || undefined,
+    fromTokenSymbol: fromResolved.symbol || fromSymbol,
   });
 
   // Step 4: Risk Agent
