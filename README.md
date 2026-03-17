@@ -64,8 +64,8 @@ External Agent / User
      ┌───────┴───────────────┐
      ▼                       ▼
 ┌─────────────────┐   ┌──────────────────────┐
-│ Analytics Agent │   │  ClawdMint A2A Agent  │  ← A2A + x402 auto-payment
-│ (onchain record)│   │  TX explanation       │  ← Next action suggestions
+│ Analytics Agent │   │  ClawdMint A2A Agent │  ← A2A + x402 auto-payment
+│ (onchain record)│   │  TX explanation      │  ← Next action suggestions
 └────────┬────────┘   └──────────────────────┘
          │
          ▼
