@@ -17,15 +17,24 @@
   .live-badge { display:flex; align-items:center; gap:0.5rem; font-family:'Share Tech Mono',monospace; font-size:0.7rem; color:var(--green); }
   .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Stats Grid */
   .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; padding:2rem; }
-  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; transition:border-color 0.3s; }
+  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; transition:border-color 0.3s; position:relative; overflow:hidden; }
   .stat-card:hover { border-color:rgba(0,212,255,0.4); }
+  .stat-card.highlight::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(0,212,255,0.05),transparent); pointer-events:none; }
   .stat-label { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.15em; margin-bottom:0.75rem; }
   .stat-value { font-size:2.2rem; font-weight:700; color:var(--accent); }
   .stat-sub { font-size:0.8rem; color:var(--dim); margin-top:0.3rem; }
+  /* Cumulative volume accent */
+  .stat-card.vol .stat-value { color:var(--gold); }
+
+  /* Section */
   .section { padding:0 2rem 2rem; }
   .section-title { font-family:'Share Tech Mono',monospace; font-size:0.7rem; color:var(--accent); letter-spacing:0.2em; margin-bottom:1rem; display:flex; align-items:center; gap:0.75rem; }
   .section-title::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
+
+  /* Charts */
   .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:2rem; }
   .chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; }
   .chart-title { font-size:0.8rem; color:var(--dim); margin-bottom:1rem; font-family:'Share Tech Mono',monospace; }
@@ -33,18 +42,53 @@
   .bar-label { display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.3rem; }
   .bar-track { height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
   .bar-fill { height:100%; border-radius:3px; transition:width 1s ease; }
+
+  /* Swap Table — 8 columns (added TX HASH) */
   .swap-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  .swap-row { display:grid; grid-template-columns:2fr 1fr 1fr 1.5fr 1fr 1fr 1.5fr; padding:0.9rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.85rem; align-items:center; transition:background 0.2s; }
+  .swap-row {
+    display:grid;
+    grid-template-columns: 1.8fr 1fr 1fr 1.3fr 0.8fr 0.9fr 1.8fr 1fr;
+    padding:0.9rem 1.2rem;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+    font-size:0.85rem;
+    align-items:center;
+    transition:background 0.2s;
+  }
   .swap-row:hover { background:rgba(0,212,255,0.03); }
   .swap-row.header { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); }
   .swap-row:last-child { border-bottom:none; }
+
+  /* TX Hash link */
+  .tx-link {
+    font-family:'Share Tech Mono',monospace;
+    font-size:0.7rem;
+    color:var(--accent);
+    text-decoration:none;
+    opacity:0.7;
+    transition:opacity 0.2s, color 0.2s;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:block;
+    max-width:120px;
+  }
+  .tx-link:hover { opacity:1; color:var(--green); text-decoration:underline; }
+  .tx-none { font-family:'Share Tech Mono',monospace; font-size:0.7rem; color:rgba(255,255,255,0.2); }
+
+  /* Badges */
   .risk-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:0.65rem; }
-  .risk-LOW { background:rgba(0,255,148,0.1); color:var(--green); border:1px solid rgba(0,255,148,0.2); }
-  .risk-MEDIUM { background:rgba(255,215,0,0.1); color:var(--gold); border:1px solid rgba(255,215,0,0.2); }
-  .risk-HIGH { background:rgba(255,71,87,0.1); color:var(--red); border:1px solid rgba(255,71,87,0.2); }
+  .risk-LOW    { background:rgba(0,255,148,0.1);  color:var(--green); border:1px solid rgba(0,255,148,0.2); }
+  .risk-MEDIUM { background:rgba(255,215,0,0.1);  color:var(--gold);  border:1px solid rgba(255,215,0,0.2); }
+  .risk-HIGH   { background:rgba(255,71,87,0.1);  color:var(--red);   border:1px solid rgba(255,71,87,0.2); }
   .network-tag { font-family:'Share Tech Mono',monospace; font-size:0.65rem; padding:0.15rem 0.5rem; border-radius:4px; background:rgba(0,212,255,0.08); color:var(--accent); border:1px solid rgba(0,212,255,0.15); }
+
   .loading { text-align:center; padding:4rem; color:var(--dim); font-family:'Share Tech Mono',monospace; }
-  @media(max-width:768px) { .charts-row{grid-template-columns:1fr} .swap-row{grid-template-columns:2fr 1fr 1fr} .swap-row>*:nth-child(n+4){display:none} }
+
+  @media(max-width:768px) {
+    .charts-row { grid-template-columns:1fr; }
+    .swap-row { grid-template-columns:2fr 1fr 1fr; }
+    .swap-row>*:nth-child(n+4) { display:none; }
+  }
 </style>
 </head>
 <body>
@@ -57,8 +101,32 @@
 </div>
 <div id="app"><div class="loading">Loading onchain data...</div></div>
 <script>
-const NETWORK_NAMES = {'eip155:8453':'Base','eip155:137':'Polygon','eip155:43114':'Avalanche','eip155:196':'X Layer','eip155:2741':'Abstract','avalanche':'Avalanche','polygon':'Polygon','base':'Base','xlayer':'X Layer'};
+const NETWORK_NAMES  = {'eip155:8453':'Base','eip155:137':'Polygon','eip155:43114':'Avalanche','eip155:196':'X Layer','eip155:2741':'Abstract','avalanche':'Avalanche','polygon':'Polygon','base':'Base','xlayer':'X Layer'};
 const NETWORK_COLORS = {'eip155:8453':'#0052ff','eip155:137':'#8247e5','eip155:43114':'#e84142','eip155:196':'#00d4ff','eip155:2741':'#00ff94','avalanche':'#e84142','polygon':'#8247e5','base':'#0052ff','xlayer':'#00d4ff'};
+
+// Block explorer TX URL per network
+const EXPLORER_TX = {
+  'eip155:8453':    'https://basescan.org/tx/',
+  'eip155:137':     'https://polygonscan.com/tx/',
+  'eip155:43114':   'https://snowtrace.io/tx/',
+  'eip155:196':     'https://www.okx.com/web3/explorer/xlayer/tx/',
+  'eip155:2741':    'https://abscan.org/tx/',
+  'avalanche':      'https://snowtrace.io/tx/',
+  'polygon':        'https://polygonscan.com/tx/',
+  'base':           'https://basescan.org/tx/',
+  'xlayer':         'https://www.okx.com/web3/explorer/xlayer/tx/',
+};
+
+function explorerUrl(network, txHash) {
+  if (!txHash) return null;
+  const base = EXPLORER_TX[network] || 'https://www.okx.com/web3/explorer/xlayer/tx/';
+  return base + txHash;
+}
+
+function shortHash(hash) {
+  if (!hash) return null;
+  return hash.slice(0, 6) + '...' + hash.slice(-4);
+}
 
 async function loadData() {
   try {
@@ -71,20 +139,54 @@ async function loadData() {
 }
 
 function render(data) {
-  const totalVolume = data.recentSwaps.reduce((sum,s) => sum + parseFloat(s.fromAmount), 0);
+  // セッション内 volume (fromAmount の合計)
+  const sessionVolume = data.recentSwaps.reduce((sum,s) => sum + parseFloat(s.fromAmount || 0), 0);
+
+  // サーバーから累積 volume が来ればそちら優先
+  const totalVolume = data.totalVolume != null
+    ? parseFloat(data.totalVolume)
+    : sessionVolume;
+
   const uniqueAgents = new Set(data.recentSwaps.map(s => s.agent)).size;
-  const networks = Object.keys(data.networkBreakdown || {});
-  const networkMax = Math.max(...Object.values(data.networkBreakdown || {'x':1}).map(Number));
-  const routeMax = Math.max(...Object.values(data.routeBreakdown || {'x':1}).map(Number));
+  const networks     = Object.keys(data.networkBreakdown || {});
+  const networkMax   = Math.max(...Object.values(data.networkBreakdown || {x:1}).map(Number));
+  const routeMax     = Math.max(...Object.values(data.routeBreakdown   || {x:1}).map(Number));
+
+  // 成功 + 失敗をマージしてソート
+  const allRows = [
+    ...data.recentSwaps.map(s => ({...s, _type:'success'})),
+    ...(data.recentFailed||[]).map(s => ({...s, _type:'failed'}))
+  ].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 15);
 
   document.getElementById('app').innerHTML = `
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">TOTAL SWAPS</div><div class="stat-value">${data.totalSwaps}</div><div class="stat-sub">Recorded on X Layer</div></div>
-      <div class="stat-card"><div class="stat-label">TOTAL VOLUME</div><div class="stat-value">$${totalVolume.toFixed(4)}</div><div class="stat-sub">USDC across all agents</div></div>
-      <div class="stat-card"><div class="stat-label">UNIQUE AGENTS</div><div class="stat-value">${uniqueAgents}</div><div class="stat-sub">Active AI agents</div></div>
-      <div class="stat-card"><div class="stat-label">PAYMENT NETWORKS</div><div class="stat-value">${networks.length}</div><div class="stat-sub">Chains used for x402</div></div>
-      <div class="stat-card"><div class="stat-label">SUCCESS RATE</div><div class="stat-value" style="color:${parseFloat(data.successRate)>=90?'var(--green)':parseFloat(data.successRate)>=70?'var(--gold)':'var(--red)'}">${data.successRate||'100%'}</div><div class="stat-sub">${data.totalFailed||0} rejected by Risk Agent</div></div>
+      <div class="stat-card">
+        <div class="stat-label">TOTAL SWAPS</div>
+        <div class="stat-value">${data.totalSwaps}</div>
+        <div class="stat-sub">Recorded on X Layer</div>
+      </div>
+      <div class="stat-card vol highlight">
+        <div class="stat-label">CUMULATIVE VOLUME</div>
+        <div class="stat-value">$${totalVolume.toFixed(4)}</div>
+        <div class="stat-sub">USDC across all agents · all-time</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">UNIQUE AGENTS</div>
+        <div class="stat-value">${uniqueAgents}</div>
+        <div class="stat-sub">Active AI agents</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">PAYMENT NETWORKS</div>
+        <div class="stat-value">${networks.length}</div>
+        <div class="stat-sub">Chains used for x402</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">SUCCESS RATE</div>
+        <div class="stat-value" style="color:${parseFloat(data.successRate)>=90?'var(--green)':parseFloat(data.successRate)>=70?'var(--gold)':'var(--red)'}">${data.successRate||'100%'}</div>
+        <div class="stat-sub">${data.totalFailed||0} rejected by Risk Agent</div>
+      </div>
     </div>
+
     <div class="section">
       <div class="section-title">PAYMENT NETWORK BREAKDOWN</div>
       <div class="charts-row">
@@ -106,39 +208,56 @@ function render(data) {
         </div>
       </div>
     </div>
+
     <div class="section">
       <div class="section-title">RECENT AGENT ACTIVITY</div>
       <div class="swap-table">
-        <div class="swap-row header"><span>AGENT</span><span>FROM</span><span>TO</span><span>PAYMENT CHAIN</span><span>RISK</span><span>STATUS</span><span>TIME</span></div>
-        ${data.recentSwaps.length===0
+        <div class="swap-row header">
+          <span>AGENT</span>
+          <span>FROM</span>
+          <span>TO</span>
+          <span>PAYMENT CHAIN</span>
+          <span>RISK</span>
+          <span>STATUS</span>
+          <span>TX HASH</span>
+          <span>TIME</span>
+        </div>
+        ${allRows.length === 0
           ? '<div style="padding:2rem;text-align:center;color:var(--dim);font-family:monospace">No swaps recorded yet</div>'
-          : [
-            ...data.recentSwaps.map(s => ({...s, _type:'success'})),
-            ...(data.recentFailed||[]).map(s => ({...s, _type:'failed'}))
-          ].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-           .slice(0,15)
-           .map(s => s._type === 'success' ? `
-            <div class="swap-row">
-              <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
-              <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
-              <span style="color:var(--green)">${parseFloat(s.toAmount).toFixed(6)} ${s.toToken}</span>
-              <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
-              <span><span class="risk-badge risk-${s.riskLevel}">${s.riskLevel}</span></span>
-              <span style="color:var(--green);font-size:0.75rem">✅ Success</span>
-              <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
-            </div>` : `
-            <div class="swap-row" style="background:rgba(255,71,87,0.03)">
-              <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
-              <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
-              <span style="color:var(--dim)">—</span>
-              <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
-              <span><span class="risk-badge risk-HIGH">HIGH</span></span>
-              <span style="color:var(--red);font-size:0.72rem">${
-                s.reason === 'risk_rejected' ? '⛔ Risk Rejected' : '❌ Broadcast Failed'
-              }</span>
-              <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
-            </div>`
-          ).join('')}
+          : allRows.map(s => {
+              const url     = explorerUrl(s.paymentNetwork || s.network, s.txHash);
+              const txCell  = url
+                ? `<a class="tx-link" href="${url}" target="_blank" rel="noopener">${shortHash(s.txHash)}</a>`
+                : `<span class="tx-none">—</span>`;
+
+              if (s._type === 'success') {
+                return `
+                <div class="swap-row">
+                  <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
+                  <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
+                  <span style="color:var(--green)">${parseFloat(s.toAmount).toFixed(6)} ${s.toToken}</span>
+                  <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
+                  <span><span class="risk-badge risk-${s.riskLevel}">${s.riskLevel}</span></span>
+                  <span style="color:var(--green);font-size:0.75rem">✅ Success</span>
+                  ${txCell}
+                  <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
+                </div>`;
+              } else {
+                return `
+                <div class="swap-row" style="background:rgba(255,71,87,0.03)">
+                  <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${s.agent.slice(0,6)}...${s.agent.slice(-4)}</span>
+                  <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
+                  <span style="color:var(--dim)">—</span>
+                  <span><span class="network-tag">${NETWORK_NAMES[s.paymentNetwork]||s.paymentNetwork}</span></span>
+                  <span><span class="risk-badge risk-HIGH">HIGH</span></span>
+                  <span style="color:var(--red);font-size:0.72rem">${
+                    s.reason === 'risk_rejected' ? '⛔ Risk Rejected' : '❌ Broadcast Failed'
+                  }</span>
+                  ${txCell}
+                  <span style="font-family:monospace;font-size:0.72rem;color:var(--dim)">${new Date(s.timestamp).toLocaleTimeString()}</span>
+                </div>`;
+              }
+            }).join('')}
       </div>
     </div>`;
 }
