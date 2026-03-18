@@ -46,7 +46,7 @@ async function sendMessage(
   const params: any = {
     message: { role: 'user', parts: [{ type: 'text', text }] },
   };
-  if (contextId) params.contextId = contextId;
+  if (contextId) params.configuration = { contextId };
 
   const body = JSON.stringify({
     jsonrpc: '2.0', id: Date.now(), method: 'message/send', params,
