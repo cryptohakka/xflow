@@ -410,6 +410,7 @@ XFlow has two distinct gas surfaces — it's important to understand both:
 - **External service dependencies** — XFlow relies on OKX DEX Aggregator, OpenRouter (Gemini), payai facilitator, and ClawdMint. If any of these are unavailable, the corresponding step will fail. The `/health` endpoint reflects server status only; downstream service health is not currently monitored.
 - **No testnet support** — X Layer does not have a public testnet. All testing is performed on mainnet with small amounts.
 - **recentSwaps window** — The dashboard shows the last 10 swaps from the analytics contract. Historical volume beyond this window uses an on-chain `totalVolume()` if available, otherwise falls back to the visible window sum.
+- **Facilitator proxy** — In some Docker environments where outbound HTTPS from bridge networks is restricted, a local proxy is required to relay facilitator requests. If you encounter `free_tier_exhausted` errors, ensure your PayAI API credentials are set and credits are available at [merchant.payai.network](https://merchant.payai.network).
 - **Single analytics contract** — There is no replay protection at the application layer beyond what the EVM provides. The analytics contract records data but does not gate swap execution.
 
 ---
@@ -424,6 +425,8 @@ OKX_PASSPHRASE=
 OPENROUTER_API_KEY=         # Gemini 2.5 Flash Lite via OpenRouter
 ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
 PAYEE_ADDRESS=0x...         # x402 payment recipient
+PAYAI_API_KEY_ID=            # PayAI merchant portal (https://merchant.payai.network)
+PAYAI_API_KEY_SECRET=        # PayAI merchant portal
 PORT=3010
 ```
 

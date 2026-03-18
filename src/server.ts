@@ -9,6 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
+
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { orchestrate } from './orchestrator.js';
@@ -19,11 +20,10 @@ app.use(express.static(join(__dirname, 'public')));
 
 // ── x402 setup ────────────────────────────────────────────────
 const PAYEE_ADDRESS = process.env.PAYEE_ADDRESS || '0x191c78ad59cc4fd59155c351c08c06c0e794b0b1';
-
-const facilitator = new HTTPFacilitatorClient({ url: 'https://facilitator.payai.network' });
+const facilitatorClient = new HTTPFacilitatorClient({ url: "http://localhost:3011" });
 const evmScheme = new ExactEvmScheme();
 
-const x402Server = new x402ResourceServer(facilitator, {
+const x402Server = new x402ResourceServer(facilitatorClient, {
   url: `http://localhost:${process.env.PORT || 3010}/swap`
 })
   .register('eip155:196', evmScheme)

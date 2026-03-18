@@ -3,8 +3,7 @@ services:
     build: .
     container_name: xflow
     restart: unless-stopped
-    ports:
-      - "3010:3010"
+    network_mode: host
     env_file:
       - .env
     environment:
