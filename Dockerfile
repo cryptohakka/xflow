@@ -5,4 +5,4 @@ RUN npm install
 COPY . .
 RUN npx tsc --outDir dist || true
 EXPOSE 3010
-CMD ["node", "--experimental-vm-modules", "node_modules/.bin/tsx", "src/server.ts"]
+CMD ["node", "--no-deprecation", "--experimental-vm-modules", "node_modules/.bin/tsx", "src/server.ts"]

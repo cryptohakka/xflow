@@ -15,45 +15,37 @@ export interface SwapContext {
   toToken: string;
   fromAmount: string;
   toAmount: string;
-  chainId?: number; // defaults to 196 (X Layer)
+  chainId?: number;
 }
 
 export interface ClawdMintAnalysis {
   txExplanation: string;
   nextActions: string;
   paidWithX402: boolean;
-  settlements: string[]; // TX hashes of x402 payments on Base
+  settlements: string[];
 }
 
-/**
- * Extract agent reply text from message/send JSON-RPC response
- */
 function extractReply(response: any): string {
   const messages: any[] = response?.result?.messages ?? [];
   const agentMsg = messages.filter((m: any) => m.role === 'agent').pop();
   return agentMsg?.parts?.map((p: any) => p.text ?? '').join('') ?? '';
 }
 
-/**
- * Send one message to ClawdMint with automatic x402 payment
- */
 async function sendMessage(
   sdk: SDK,
   label: string,
   text: string,
-  contextId?: string
 ): Promise<{ reply: string; contextId: string; settlementTx: string | null }> {
   const params: any = {
     message: { role: 'user', parts: [{ type: 'text', text }] },
   };
-  if (contextId) params.configuration = { contextId };
 
   const body = JSON.stringify({
     jsonrpc: '2.0', id: Date.now(), method: 'message/send', params,
   });
 
   console.log(`\n🧠 XFlow → ClawdMint [${label}]:`);
-  console.log(`   "${text.slice(0, 80)}..."`);
+  console.log(`   "${text.slice(0, 100)}..."`);
 
   let result = await (sdk as any).request({
     url: CLAWDMINT_A2A, method: 'POST', body,
@@ -73,18 +65,15 @@ async function sendMessage(
     console.log(`   tx: ${settlementTx}`);
   }
 
-  const returnedContextId = result.result?.contextId ?? contextId ?? '';
+  const returnedContextId = result.result?.contextId ?? '';
   const reply = extractReply(result);
 
   console.log(`\n🤖 ClawdMint → XFlow [${label}]:`);
-  console.log(`   "${reply.slice(0, 120)}..."`);
+  console.log(reply || '(empty reply)');
 
   return { reply, contextId: returnedContextId, settlementTx };
 }
 
-/**
- * Main: analyze a completed swap with ClawdMint via A2A + x402
- */
 export async function analyzeSwapWithClawdMint(
   swap: SwapContext
 ): Promise<ClawdMintAnalysis> {
@@ -97,11 +86,11 @@ export async function analyzeSwapWithClawdMint(
   const chainId = swap.chainId ?? 196;
   const settlements: string[] = [];
 
-  console.log(`\n${'─'.repeat(60)}`);
-  console.log(`🌊 XFlow A2A Session`);
+  console.log(`\n════════════════════════════════════════════════════════════`);
+  console.log(`3️⃣  A2A Session (ClawdMint)`);
+  console.log(`════════════════════════════════════════════════════════════`);
   console.log(`   Swap: ${swap.fromAmount} ${swap.fromToken} → ${swap.toAmount} ${swap.toToken}`);
   console.log(`   TX:   ${swap.txHash}`);
-  console.log(`${'─'.repeat(60)}`);
 
   const txMsg =
     `I just executed a DeFi swap via XFlow (an AI-powered DEX agent) on X Layer (chain ${chainId}). ` +
@@ -109,25 +98,27 @@ export async function analyzeSwapWithClawdMint(
     `I swapped ${swap.fromAmount} ${swap.fromToken} for ${swap.toAmount} ${swap.toToken}. ` +
     `Please analyze this transaction and explain what happened in plain English.`;
 
-  console.log(`🧠 XFlow: "I need expert analysis on this swap to optimize future fund allocation"`);
+  console.log(`\n🧠 XFlow: "I need expert analysis on this swap to optimize future fund allocation"`);
   const step1 = await sendMessage(sdk, 'TX Analysis', txMsg);
   if (step1.settlementTx) settlements.push(step1.settlementTx);
 
   const nextMsg =
-    `Based on this swap, what are the best next actions I should consider? ` +
-    `Please check: current yield opportunities for ${swap.toToken}, ` +
-    `gas prices across chains, and any relevant bridge routes from X Layer.`;
+    `I'm an AI agent operating on X Layer (eip155:196). ` +
+    `I just swapped ${swap.fromAmount} ${swap.fromToken} for ${swap.toAmount} ${swap.toToken}. ` +
+    `X Layer is an EVM chain by OKX with OKB as native gas token. ` +
+    `What are the best next actions for this ${swap.toToken} on X Layer? ` +
+    `Consider: yield opportunities, liquidity pools on OKX DEX, and any X Layer native protocols.`;
 
-  console.log(`🧠 XFlow: "Next actions will determine where to deploy the received ${swap.toToken}"`);
-  const step2 = await sendMessage(sdk, 'Next Actions', nextMsg, step1.contextId);
+  console.log(`\n🧠 XFlow: "Next actions will determine where to deploy the received ${swap.toToken}"`);
+  const step2 = await sendMessage(sdk, 'Next Actions', nextMsg);
   if (step2.settlementTx) settlements.push(step2.settlementTx);
 
-  console.log(`\n${'─'.repeat(60)}`);
+  console.log(`\n════════════════════════════════════════════════════════════`);
   console.log(`✅ A2A Session complete`);
   console.log(`💰 Total spent by XFlow: $${(settlements.length * 0.001).toFixed(3)} USDC`);
-  console.log(`   - TX analysis:   $0.001 (tx: ${settlements[0]?.slice(0, 10)}...)`);
-  console.log(`   - Next actions:  $0.001 (tx: ${settlements[1]?.slice(0, 10)}...)`);
-  console.log(`${'─'.repeat(60)}\n`);
+  console.log(`   TX analysis:  $0.001 (tx: ${settlements[0]?.slice(0, 10)}...)`);
+  console.log(`   Next actions: $0.001 (tx: ${settlements[1]?.slice(0, 10)}...)`);
+  console.log(`════════════════════════════════════════════════════════════\n`);
 
   return {
     txExplanation: step1.reply,

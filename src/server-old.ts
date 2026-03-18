@@ -32,10 +32,10 @@ const x402Server = new x402ResourceServer(facilitatorClient, {
   .register('eip155:43114', evmScheme);
 
 const USDC_ADDRESSES: Record<string, string> = {
-  'eip155:196':  '0x74b7f16337b8972027f6196a17a631ac6de26d22',
-  'eip155:8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-  'eip155:137':  '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
-  'eip155:43114': '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+  'eip155:196':  '0x74b7f16337b8972027f6196a17a631ac6de26d22', // X Layer
+  'eip155:8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base
+  'eip155:137':  '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', // Polygon
+  'eip155:43114': '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', // Avalanche
 };
 const USDC_EIP712: Record<string, { name: string; version: string }> = {
   'eip155:196':  { name: 'USD Coin', version: '2' },
@@ -45,6 +45,13 @@ const USDC_EIP712: Record<string, { name: string; version: string }> = {
 };
 
 const NETWORKS = ['eip155:196', 'eip155:8453', 'eip155:137', 'eip155:43114'];
+
+const NETWORK_LABEL: Record<string, string> = {
+  'eip155:43114': 'Avalanche',
+  'eip155:8453':  'Base',
+  'eip155:137':   'Polygon',
+  'eip155:196':   'X Layer',
+};
 
 const paymentConfig = {
   'POST /confirm': {
@@ -79,10 +86,12 @@ app.use(paymentMiddleware(paymentConfig, x402Server, undefined, undefined, false
 
 // ── Routes ────────────────────────────────────────────────────
 
+// Health check (free)
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
 });
 
+// Confirm swap and record onchain (x402 protected - $0.001 on success)
 app.post('/confirm', async (req: Request, res: Response) => {
   try {
     const {
@@ -92,19 +101,12 @@ app.post('/confirm', async (req: Request, res: Response) => {
 
     if (!txHash) return res.status(400).json({ error: 'txHash required' });
 
-    // Swap完了ログ
-    console.log(`\n${'─'.repeat(55)}`);
-    console.log(`✅ Swap complete`);
-    console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
-    console.log(`   TX:   ${txHash}`);
-    console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`);
-    console.log(`${'─'.repeat(55)}`);
-
+    // Step 1: analytics記録
     const { recordSwapOnchain } = await import('./analyticsAgent.js');
     const analyticsTx = await recordSwapOnchain({
       agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
       fromToken: fromToken || 'USDC',
-      toToken: toToken || 'USDC',
+      toToken: toToken || 'WOKB',
       fromAmount: fromAmount || '0',
       toAmount: toAmount || '0',
       paymentNetwork: paymentNetwork || 'unknown',
@@ -112,13 +114,14 @@ app.post('/confirm', async (req: Request, res: Response) => {
       riskLevel: riskLevel || 'LOW',
     });
 
+    // Step 2: ClawdMint A2A分析（x402自動決済）
     let clawdmint = null;
     try {
       const { analyzeSwapWithClawdMint } = await import('./clawdmintA2A.js');
       const analysis = await analyzeSwapWithClawdMint({
         txHash,
         fromToken: fromToken || 'USDC',
-        toToken: toToken || 'USDC',
+        toToken: toToken || 'WOKB',
         fromAmount: fromAmount || '0',
         toAmount: toAmount || '0',
         chainId: 196,
@@ -140,6 +143,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
   }
 });
 
+// Dashboard data (free)
 app.get('/dashboard', async (_req: Request, res: Response) => {
   try {
     const { getDashboardData } = await import('./analyticsAgent.js');
@@ -150,31 +154,39 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
   }
 });
 
+// Main swap endpoint (x402 protected)
 app.post('/swap', async (req: Request, res: Response) => {
+  console.log('payment-signature exists:', !!req.headers['payment-signature']);
+  console.log('all header keys:', Object.keys(req.headers));
   const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta } = req.body;
 
   if (!query) return res.status(400).json({ error: 'query is required' });
 
-  // ── Phase 1: SmartPaymentRouter ──────────────────────────────
+  // ── Phase 1: SmartPaymentRouter情報 ──────────────────────────
   console.log('\n════════════════════════════════════════════════════════════');
-  console.log('1️⃣  Smart Payment Router');
-  console.log('════════════════════════════════════════════════════════════');
+  console.log('🌊 XFlow Smart Payment Router');
   if (_routerMeta?.allBalances) {
     console.log('🔍 Checking USDC balances across networks...');
     _routerMeta.allBalances.forEach((b: any) => {
-      console.log(`   ${b.name}: ${b.balance} USDC ${b.sufficient ? '✅' : '❌'} · gas $${b.gasCostUSD?.toFixed(6) || 'n/a'}`);
+      console.log(`   ${b.name}: ${b.balance} USDC ${b.sufficient ? '✅' : '❌'}`);
     });
   }
-
   if (_routerMeta?.selectedNetwork) {
     console.log(`💡 Selected: ${_routerMeta.selectedNetwork} · gas $${Number(_routerMeta.selectedGasCostUSD).toFixed(6)}`);
   }
-  console.log(`✅ XFlow got paid ($0.001 USDC)`);
-  console.log('════════════════════════════════════════════════════════════\n');
 
-  // ── Phase 2: Swap pipeline ───────────────────────────────────
-  console.log('2️⃣  Swap Pipeline (X Layer)');
-  console.log('════════════════════════════════════════════════════════════');
+  // x402決済チェーン（payment-signatureをデコード）
+  const sig = req.headers['payment-signature'] as string;
+  let paymentNetwork = 'unknown';
+  if (sig) {
+    try {
+      const decoded = JSON.parse(Buffer.from(sig, 'base64').toString());
+      paymentNetwork = decoded.payload?.accepted?.network || 'unknown';
+    } catch {}
+  }
+  console.log(`💸 Payment received on: ${NETWORK_LABEL[paymentNetwork] || paymentNetwork}`);
+  console.log(`   ✅ XFlow got paid ($0.001 USDC)`);
+  console.log('════════════════════════════════════════════════════════════\n');
 
   try {
     const privateKey = process.env.PRIVATE_KEY as `0x${string}`;

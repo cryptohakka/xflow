@@ -10,29 +10,18 @@ const env = Object.fromEntries(
     .map(l=>[l.split('=')[0].trim(),l.split('=').slice(1).join('=').trim()])
 );
 
+console.log('\n🌊 XFlow Smart Payment Router Demo\n');
+
 const { fetchWithPayment, selectedNetwork, allBalances } = await createSmartPaymentFetch(env.PRIVATE_KEY);
 
 const SWAP_QUERY = 'swap 0.01 USDC to USDG';
 
-// Step 1: quoteを取得
+// Step 1: quoteを取得（fromTokenAddress/spenderを動的に取得）
 async function fetchQuote(fetchFn, userAddress) {
   const res = await fetchFn('http://localhost:3010/swap', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: SWAP_QUERY,
-      userAddress,
-      _routerMeta: {
-        selectedNetwork: selectedNetwork?.name,
-        selectedGasCostUSD: selectedNetwork?.gasCostUSD,
-        allBalances: allBalances.map(b => ({
-          name: b.name,
-          balance: b.balanceFormatted,
-          sufficient: b.sufficient,
-          gasCostUSD: b.gasCostUSD, 
-        })),
-      },
-    }),
+    body: JSON.stringify({ query: SWAP_QUERY, userAddress }),
   });
   const pr = res.headers.get('payment-response');
   if (pr) {
@@ -50,7 +39,12 @@ const account = pta(env.PRIVATE_KEY);
 const walletClient = createWalletClient({ account, chain: xlayer, transport: http('https://rpc.xlayer.tech') });
 const publicClient = createPublicClient({ chain: xlayer, transport: http('https://rpc.xlayer.tech') });
 
+// 1回目のquote（allowanceチェック用）
 const txData = await fetchQuote(fetchWithPayment, account.address);
+console.log('RAW txData:', JSON.stringify(txData).slice(0, 200));
+console.log(`\n✅ Result: ${txData.result?.data?.status}`);
+console.log(`   Risk: ${txData.result?.data?.risk?.riskLevel}`);
+console.log(`   Quote: ${txData.result?.data?.quote?.fromAmount} ${txData.result?.intent?.fromToken} → ${txData.result?.data?.quote?.toAmount} ${txData.result?.intent?.toToken}`);
 
 const tx0 = txData.result?.data?.result?.tx;
 if (!tx0) { console.log('❌ No TX data'); process.exit(1); }
@@ -73,15 +67,17 @@ if (fromTokenAddr && spender) {
     console.log(`   Approve TX: ${approveTx}`);
     await publicClient.waitForTransactionReceipt({ hash: approveTx });
     console.log(`   ✅ Approved — fetching fresh quote...`);
+    // approve完了後に新鮮なquoteを取得
     finalTxData = await fetchQuote(fetchWithPayment, account.address);
     finalTx = finalTxData.result?.data?.result?.tx;
     if (!finalTx) { console.log('❌ Re-quote failed'); process.exit(1); }
   } else {
-    console.log(`✅ Allowance sufficient, skipping approve`);
+    console.log(`\n✅ Allowance sufficient, skipping approve`);
   }
 }
 
-// Broadcast swap TX
+// Step 2: swap TX即時送信
+console.log('\n2️⃣ Broadcasting swap TX...');
 const swapHash = await walletClient.sendTransaction({
   to: finalTx.to, data: finalTx.data,
   value: BigInt(finalTx.value || '0'),
@@ -93,12 +89,14 @@ console.log(`   TX: ${swapHash}`);
 console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${swapHash}`);
 
 const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash });
+console.log(`   ${receipt.status === 'success' ? '✅ Swap successful!' : '❌ Swap failed'}`);
 
-// Confirm + Analytics + ClawdMint A2A
+// Step 3: Analytics Agent (x402 execution fee)
 const confirmFetch = wrapFetchWithPaymentFromConfig(fetch, {
   schemes: [{ network: selectedNetwork?.network || 'eip155:196', client: new ExactEvmScheme(account) }],
 });
 if (receipt.status === 'success') {
+  console.log('\n3️⃣ Recording swap onchain...');
   const confirmRes = await confirmFetch('http://localhost:3010/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -121,7 +119,13 @@ if (receipt.status === 'success') {
   }
   const confirmData = await confirmRes.json();
   if (confirmData.analyticsTx) {
-    console.log(`\n✅ Analytics TX: ${confirmData.analyticsTx}`);
+    console.log(`   ✅ Analytics TX: ${confirmData.analyticsTx}`);
     console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${confirmData.analyticsTx}`);
+  }
+
+  if (confirmData.clawdmint) {
+    console.log(`\n🤖 ClawdMint Analysis (paid $${confirmData.clawdmint.paidWithX402 ? '0.002' : '0'} USDC):`);
+    console.log(`\n📝 TX Explanation:\n${confirmData.clawdmint.txExplanation}`);
+    console.log(`\n💡 Next Actions:\n${confirmData.clawdmint.nextActions}`);
   }
 }
