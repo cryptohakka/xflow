@@ -19,6 +19,7 @@ const KNOWN_TOKENS: Record<string, string> = {
   'DAI':    '0xc5015b9d9161dca7e18e32f6f25c4ad850731fd4',
   'USDG':   '0x4ae46a509f6b1d9056937ba4500cb143933d2dc8',
   'CRVUSD': '0xda8f4eb4503acf5dec5420523637bb5b33a846f6',
+  'USDT0':  '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
 // アドレス→シンボルの逆引きマップ

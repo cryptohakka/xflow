@@ -22,8 +22,6 @@ export interface ParsedIntent {
  */
 async function parseIntent(query: string): Promise<ParsedIntent> {
   try {
-    const tokens = await getAvailableTokens();
-    const tokenList = tokens.join('|');
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,20 +41,20 @@ Rules:
 - toToken = the token being BOUGHT/RECEIVED (appears after "to")
 - Example: "swap 1 WETH to USDC" → fromToken=WETH, toToken=USDC
 
-Return: {"action":"swap"|"quote"|"unknown","fromToken":"${tokenList}"|null,"toToken":"${tokenList}"|null,"amount":"number as string"|null}
+Return: {"action":"swap"|"quote"|"unknown","fromToken":"USDC"|"WOKB"|"OKB"|"WETH"|null,"toToken":"USDC"|"WOKB"|"OKB"|"WETH"|null,"amount":"number as string"|null}
 
-Supported tokens on X Layer: ${tokenList}`,
+Supported tokens on X Layer: USDC, WOKB, OKB (WOKB=OKB), WETH`
         }],
       }),
     });
     const data = await res.json() as any;
     const text = data.choices[0].message.content.trim();
-    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(cleaned);
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim(); return JSON.parse(cleaned);
   } catch {
     // fallback to keyword matching
     const isSwap = /swap|buy|sell|trade/i.test(query);
     const amountMatch = query.match(/[\d.]+/);
+    // fallback: queryからシンボルを正規表現で抽出
     const swapMatch = query.match(/swap\s+[\d.]+\s+(\w+)\s+to\s+(\w+)/i);
     return {
       action: isSwap ? 'swap' : 'quote',
@@ -120,6 +118,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}(${fromResolved.address?.slice(0,8)}), ${toSymbol}=${toResolved.source}(${toResolved.address?.slice(0,8)})`);
 
   // Step 3: quoteを取得してrisk評価
+  // fromSymbol/toSymbolをアドレスから正しく上書き
   console.log(`📊 Getting quote for risk evaluation... ${fromSymbol} → ${toSymbol}`);
   const quote = await getSwapQuote({
     fromToken: fromSymbol,
@@ -178,6 +177,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     transaction: '',
     data: {
       status: 'approved', risk, quote, result,
+      // Call POST /confirm with swap txHash after successful broadcast
       confirmEndpoint: '/confirm',
     },
   };

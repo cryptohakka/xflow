@@ -12,7 +12,7 @@ const env = Object.fromEntries(
 
 const { fetchWithPayment, selectedNetwork, allBalances } = await createSmartPaymentFetch(env.PRIVATE_KEY);
 
-const SWAP_QUERY = 'swap 0.01 USDC to USDG';
+const SWAP_QUERY = 'swap 0.01 USDC to USDT0';
 
 // Step 1: quoteを取得
 async function fetchQuote(fetchFn, userAddress) {
@@ -85,7 +85,7 @@ if (fromTokenAddr && spender) {
 const swapHash = await walletClient.sendTransaction({
   to: finalTx.to, data: finalTx.data,
   value: BigInt(finalTx.value || '0'),
-  gas: BigInt(finalTx.gas),
+  gas: BigInt(Math.floor(Number(finalTx.gas) * 1.5)),
   gasPrice: BigInt(finalTx.gasPrice),
   chainId: 196,
 });
