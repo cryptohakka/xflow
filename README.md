@@ -11,6 +11,8 @@ XFlow is a multi-agent system that enables AI agents to autonomously execute DeF
 ## Table of Contents
 
 - [Architecture](#architecture)
+- [Sequence Diagram](#sequence-diagram)
+- [Source Structure](#source-structure)
 - [Key Features](#key-features)
 - [Why XFlow](#why-xflow)
 - [Agent-to-Agent (A2A) + x402](#agent-to-agent-a2a--x402)
@@ -79,6 +81,67 @@ External Agent / User
 
 ---
 
+## Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Router as SmartPaymentRouter
+    participant XFlow as XFlow Server
+    participant OKX as OKX DEX API
+    participant Risk as Risk Agent
+    participant Chain as X Layer
+    participant Analytics as XFlowAnalytics.sol
+    participant ClawdMint
+
+    Agent->>Router: createSmartPaymentFetch()
+    Router-->>Agent: fetchWithPayment (optimal chain selected)
+
+    Agent->>XFlow: POST /swap (x402 payment)
+    XFlow->>OKX: Fetch quote
+    OKX-->>XFlow: Quote + route
+    XFlow->>Risk: Evaluate risk
+    Risk-->>XFlow: LOW / MEDIUM / HIGH
+    XFlow-->>Agent: Quote + risk (no TX data)
+
+    Agent->>Agent: Check allowance → approve if needed
+    Agent->>XFlow: POST /tx (free — fetch fresh TX)
+    XFlow->>OKX: Fetch swap TX data
+    OKX-->>XFlow: Unsigned TX
+    XFlow-->>Agent: Fresh TX data
+
+    Agent->>Chain: Sign & broadcast TX
+    Chain-->>Agent: txHash
+
+    Agent->>XFlow: POST /confirm (x402 payment)
+    XFlow->>Analytics: Record swap onchain
+    XFlow->>ClawdMint: A2A call (x402 autopayment)
+    ClawdMint-->>XFlow: TX explanation + next actions
+    XFlow-->>Agent: Result + suggestions
+```
+
+---
+
+## Source Structure
+
+```
+src/
+├── server.ts                # Express server — /swap, /tx, /confirm, /dashboard
+├── smartPaymentRouter.ts    # Chain selection: gasCost + finality × $0.0001/s
+├── orchestrator.ts          # LLM intent parsing (Gemini 2.5 Flash Lite)
+├── riskAgent.ts             # Risk evaluation — price impact + route quality
+├── dexAgent.ts              # OKX DEX Aggregator — quote + TX data
+├── tokenResolver.ts         # Token address resolution (OKX API + known list)
+├── analyticsAgent.ts        # Onchain swap recording
+├── clawdmintA2A.ts          # A2A + x402 call to ClawdMint
+├── contracts/
+│   └── XFlowAnalytics.sol   # Analytics smart contract (deployed on X Layer)
+└── public/
+    └── index.html           # Real-time dashboard
+```
+
+---
+
 ## Key Features
 
 - **Smart Payment Router** — Checks USDC balances across all supported chains and automatically selects the optimal chain using a composite score: `gasCost + finality × $0.0001/s`. A chain with cheap gas but slow finality may lose to one that's slightly more expensive but settles faster. Handles the x402 402-handshake transparently — any x402-compatible agent can call XFlow without worrying about which chain to pay from.
@@ -103,6 +166,9 @@ Traditional APIs require API keys, subscriptions, and manual billing. XFlow uses
 - Pay from any chain — SmartPaymentRouter handles the rest
 - Full onchain audit trail of every swap
 - Post-swap AI analysis via ClawdMint A2A (agent pays agent, automatically)
+
+**For the Agent Economy:**
+SmartPaymentRouter doesn't just optimize for the caller — it reduces gas costs for the x402 facilitator too. The facilitator settles payments onchain on behalf of agents; by routing payments to the cheapest chain, the total gas burden across all settlements decreases. Lower facilitator costs mean more sustainable infrastructure for the agent economy as a whole.
 
 ---
 
@@ -435,11 +501,13 @@ The Risk Agent evaluates every swap before execution. Source: [`src/riskAgent.ts
 ```
 finalScore = max(priceImpactScore, routeScore)
 
-if priceImpact data unavailable → UNKNOWN (rejected)
-if finalScore >= 4             → HIGH    (rejected)
-elif finalScore >= 2           → MEDIUM  (approved with warning)
-else                           → LOW     (approved)
+if priceImpact data unavailable → UNKNOWN  (rejected)
+if finalScore >= 4              → HIGH     (rejected)
+elif finalScore >= 2            → MEDIUM   (approved with warning)
+else                            → LOW      (approved)
 ```
+
+In practice: swaps with price impact < 2% are approved (MEDIUM or below). Only price impact > 2% triggers HIGH and rejection. Since OKX DEX Aggregator returns only verified DEXes, route score is typically 0.
 
 HIGH risk and UNKNOWN swaps are rejected before TX generation. Rejections are recorded onchain via `recordFailedSwap`.
 
