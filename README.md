@@ -436,7 +436,7 @@ The Risk Agent evaluates every swap before execution. Source: [`src/riskAgent.ts
 finalScore = max(priceImpactScore, routeScore)
 
 if priceImpact data unavailable → UNKNOWN (rejected)
-if finalScore >= 3             → HIGH    (rejected)
+if finalScore >= 4             → HIGH    (rejected)
 elif finalScore >= 2           → MEDIUM  (approved with warning)
 else                           → LOW     (approved)
 ```
