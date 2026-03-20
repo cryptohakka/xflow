@@ -53,11 +53,9 @@ export interface NetworkBalance {
   balance: bigint;
   balanceFormatted: string;
   sufficient: boolean;
+  gasCostUSD?: number;
 }
 
-/**
- * Check USDC balances across all supported networks
- */
 export async function checkBalances(address: string): Promise<NetworkBalance[]> {
   const results = await Promise.allSettled(
     SUPPORTED_NETWORKS.map(async (n) => {
@@ -76,7 +74,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
         name: n.name,
         balance: balance as bigint,
         balanceFormatted: formatUnits(balance as bigint, 6),
-        sufficient: (balance as bigint) >= 1000n, // 0.001 USDC
+        sufficient: (balance as bigint) >= 1000n,
       };
     })
   );
@@ -92,48 +90,12 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
   );
 }
 
-/**
- * Select best network for payment
- * Priority: sufficient balance → highest balance
- */
 export function selectBestNetwork(balances: NetworkBalance[]): NetworkBalance | null {
   const sufficient = balances.filter(b => b.sufficient);
   if (sufficient.length === 0) return null;
   return sufficient.sort((a, b) => Number(b.balance - a.balance))[0];
 }
 
-/**
- * Smart payment fetch - automatically selects best chain
- */
-export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
-  const account = privateKeyToAccount(privateKey);
-
-  console.log('🔍 Checking USDC balances across networks...');
-  const balances = await checkBalances(account.address);
-
-  balances.forEach(b => {
-    console.log(`   ${b.name}: ${b.balanceFormatted} USDC ${b.sufficient ? '✅' : '❌'}`);
-  });
-
-  const best = await selectBestNetworkByGas(balances);
-  if (!best) {
-    throw new Error('Insufficient USDC balance on all supported networks');
-  }
-
-  console.log(`💡 Selected: ${best.name} (${best.balanceFormatted} USDC · gas $${best.gasCostUSD.toFixed(6)})`);
-
-  return {
-    fetchWithPayment: wrapFetchWithPaymentFromConfig(fetch, {
-      schemes: [{ network: best.network, client: new ExactEvmScheme(account) }],
-    }),
-    selectedNetwork: best,
-    allBalances: balances,
-  };
-}
-
-/**
- * Get gas cost in USD for a network
- */
 async function getGasCostUSD(network: typeof SUPPORTED_NETWORKS[0]): Promise<number> {
   try {
     const client = createPublicClient({
@@ -141,16 +103,14 @@ async function getGasCostUSD(network: typeof SUPPORTED_NETWORKS[0]): Promise<num
       transport: http(network.rpc),
     });
     const gasPrice = await client.getGasPrice();
-    const estimatedGas = 100000n; // x402 transfer estimate
-    // gasPriceはwei単位、estimatedGasはgas units
-    const gasCostNative = gasPrice * estimatedGas; // wei
+    const estimatedGas = 100000n;
+    const gasCostNative = gasPrice * estimatedGas;
 
-    // ネイティブトークン価格取得（USD）
     const nativeTokenIds: Record<string, string> = {
-      'eip155:8453':  'ethereum',   // Base → ETH
-      'eip155:137':   'polygon-ecosystem-token', // Polygon → MATIC
-      'eip155:43114': 'avalanche-2',   // Avalanche → AVAX
-      'eip155:196':   'okb',           // X Layer → OKB
+      'eip155:8453':  'ethereum',
+      'eip155:137':   'polygon-ecosystem-token',
+      'eip155:43114': 'avalanche-2',
+      'eip155:196':   'okb',
     };
     const tokenId = nativeTokenIds[network.network];
     const priceRes = await fetch(
@@ -160,17 +120,18 @@ async function getGasCostUSD(network: typeof SUPPORTED_NETWORKS[0]): Promise<num
     const priceData = await priceRes.json() as any;
     const priceUSD = priceData[tokenId]?.usd || 0;
 
-    const gasCostUSD = Number(gasCostNative) / 1e18 * (priceUSD || 100); // fallback $100 if price unavailable
-    return gasCostUSD;
+    return Number(gasCostNative) / 1e18 * (priceUSD || 100);
   } catch {
-    return 999; // エラー時は最高コストとして扱う
+    return 999;
   }
 }
 
 /**
- * Select best network considering gas cost in USD
+ * 全チェーンのガスコストを取得してbestを選ぶ
  */
-export async function selectBestNetworkByGas(balances: NetworkBalance[]): Promise<NetworkBalance & { gasCostUSD: number } | null> {
+export async function selectBestNetworkByGas(
+  balances: NetworkBalance[]
+): Promise<(NetworkBalance & { gasCostUSD: number }) | null> {
   const sufficient = balances.filter(b => b.sufficient);
   if (sufficient.length === 0) return null;
 
@@ -184,6 +145,43 @@ export async function selectBestNetworkByGas(balances: NetworkBalance[]): Promis
     })
   );
 
-  // ガス代が安い順にソート
   return withGas.sort((a, b) => a.gasCostUSD - b.gasCostUSD)[0];
+}
+
+export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
+  const account = privateKeyToAccount(privateKey);
+
+  console.log('🔍 Checking USDC balances across networks...');
+  const balances = await checkBalances(account.address);
+  balances.forEach(b => {
+    console.log(`   ${b.name}: ${b.balanceFormatted} USDC ${b.sufficient ? '✅' : '❌'}`);
+  });
+
+  // 全チェーンのガスコストを並列取得
+  console.log('⛽ Estimating gas costs...');
+  const allBalancesWithGas = await Promise.all(
+    balances.map(async (b) => {
+      const networkConfig = SUPPORTED_NETWORKS.find(n => n.network === b.network)!;
+      const gasCostUSD = await getGasCostUSD(networkConfig);
+      console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas`);
+      return { ...b, gasCostUSD };
+    })
+  );
+
+  // sufficientなチェーンの中でガス最安を選ぶ
+  const sufficientWithGas = allBalancesWithGas.filter(b => b.sufficient);
+  if (sufficientWithGas.length === 0) {
+    throw new Error('Insufficient USDC balance on all supported networks');
+  }
+  const best = sufficientWithGas.sort((a, b) => a.gasCostUSD - b.gasCostUSD)[0];
+
+  console.log(`💡 Selected: ${best.name} (${best.balanceFormatted} USDC · gas $${best.gasCostUSD.toFixed(6)})`);
+
+  return {
+    fetchWithPayment: wrapFetchWithPaymentFromConfig(fetch, {
+      schemes: [{ network: best.network, client: new ExactEvmScheme(account) }],
+    }),
+    selectedNetwork: best,
+    allBalances: allBalancesWithGas,
+  };
 }

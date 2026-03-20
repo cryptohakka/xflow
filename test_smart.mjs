@@ -35,11 +35,15 @@ const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
     _routerMeta: {
       selectedNetwork: selectedNetwork?.name,
       selectedGasCostUSD: selectedNetwork?.gasCostUSD,
+        selectedFinality: selectedNetwork?.finalitySeconds,
+        selectedScore: selectedNetwork?.score,
       allBalances: allBalances.map(b => ({
         name: b.name,
         balance: b.balanceFormatted,
         sufficient: b.sufficient,
         gasCostUSD: b.gasCostUSD,
+          finalitySeconds: b.finalitySeconds,
+          score: b.score,
       })),
     },
   }),

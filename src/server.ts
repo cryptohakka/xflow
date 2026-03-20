@@ -166,11 +166,11 @@ app.post('/swap', async (req: Request, res: Response) => {
   if (_routerMeta?.allBalances) {
     console.log('🔍 Checking USDC balances across networks...');
     _routerMeta.allBalances.forEach((b: any) => {
-      console.log(`   ${b.name}: ${b.balance} USDC ${b.sufficient ? '✅' : '❌'} · gas $${b.gasCostUSD?.toFixed(6) || 'n/a'}`);
+      console.log(`   ${b.name}: ${b.balance} USDC ${b.sufficient ? '✅' : '❌'} · gas $${b.gasCostUSD?.toFixed(6) || 'n/a'} · ${b.finalitySeconds ?? '?'}s finality · score $${b.score?.toFixed(6) || 'n/a'}`);
     });
   }
   if (_routerMeta?.selectedNetwork) {
-    console.log(`💡 Selected: ${_routerMeta.selectedNetwork} · gas $${Number(_routerMeta.selectedGasCostUSD).toFixed(6)}`);
+    console.log(`💡 Selected: ${_routerMeta.selectedNetwork} · score $${Number(_routerMeta.selectedScore).toFixed(6)}`);
   }
   console.log(`✅ XFlow got paid ($0.001 USDC)`);
   console.log('════════════════════════════════════════════════════════════\n');

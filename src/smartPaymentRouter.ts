@@ -1,12 +1,17 @@
 /**
  * XFlow Smart Payment Router
  * Automatically selects the best chain for x402 payment
- * based on USDC balances across supported networks
+ * based on USDC balances, gas cost, and finality time.
+ *
+ * Scoring: score = gasCostUSD + finality_seconds * FINALITY_WEIGHT
+ * FINALITY_WEIGHT = 0.0001  (1s finality delay ≈ $0.0001 cost)
  */
 import { createPublicClient, http, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
 import { ExactEvmScheme } from '@x402/evm';
+
+const FINALITY_WEIGHT = 0.0001; // 1s finality delay ≈ $0.0001
 
 const SUPPORTED_NETWORKS = [
   {
@@ -15,6 +20,7 @@ const SUPPORTED_NETWORKS = [
     rpc: 'https://mainnet.base.org',
     chainId: 8453,
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    finalitySeconds: 2.0,
   },
   {
     network: 'eip155:137',
@@ -22,6 +28,7 @@ const SUPPORTED_NETWORKS = [
     rpc: 'https://polygon-bor-rpc.publicnode.com',
     chainId: 137,
     usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+    finalitySeconds: 5.0,
   },
   {
     network: 'eip155:43114',
@@ -29,6 +36,7 @@ const SUPPORTED_NETWORKS = [
     rpc: 'https://api.avax.network/ext/bc/C/rpc',
     chainId: 43114,
     usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
+    finalitySeconds: 0.8,
   },
   {
     network: 'eip155:196',
@@ -36,6 +44,7 @@ const SUPPORTED_NETWORKS = [
     rpc: 'https://rpc.xlayer.tech',
     chainId: 196,
     usdc: '0x74b7f16337b8972027f6196a17a631ac6de26d22',
+    finalitySeconds: 1.0,
   },
 ];
 
@@ -54,6 +63,8 @@ export interface NetworkBalance {
   balanceFormatted: string;
   sufficient: boolean;
   gasCostUSD?: number;
+  finalitySeconds?: number;
+  score?: number;
 }
 
 export async function checkBalances(address: string): Promise<NetworkBalance[]> {
@@ -75,6 +86,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
         balance: balance as bigint,
         balanceFormatted: formatUnits(balance as bigint, 6),
         sufficient: (balance as bigint) >= 1000n,
+        finalitySeconds: n.finalitySeconds,
       };
     })
   );
@@ -86,6 +98,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
       balance: 0n,
       balanceFormatted: '0',
       sufficient: false,
+      finalitySeconds: SUPPORTED_NETWORKS[i].finalitySeconds,
     }
   );
 }
@@ -126,28 +139,6 @@ async function getGasCostUSD(network: typeof SUPPORTED_NETWORKS[0]): Promise<num
   }
 }
 
-/**
- * 全チェーンのガスコストを取得してbestを選ぶ
- */
-export async function selectBestNetworkByGas(
-  balances: NetworkBalance[]
-): Promise<(NetworkBalance & { gasCostUSD: number }) | null> {
-  const sufficient = balances.filter(b => b.sufficient);
-  if (sufficient.length === 0) return null;
-
-  console.log('⛽ Estimating gas costs...');
-  const withGas = await Promise.all(
-    sufficient.map(async (b) => {
-      const networkConfig = SUPPORTED_NETWORKS.find(n => n.network === b.network)!;
-      const gasCostUSD = await getGasCostUSD(networkConfig);
-      console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas`);
-      return { ...b, gasCostUSD };
-    })
-  );
-
-  return withGas.sort((a, b) => a.gasCostUSD - b.gasCostUSD)[0];
-}
-
 export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
   const account = privateKeyToAccount(privateKey);
 
@@ -157,25 +148,29 @@ export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
     console.log(`   ${b.name}: ${b.balanceFormatted} USDC ${b.sufficient ? '✅' : '❌'}`);
   });
 
-  // 全チェーンのガスコストを並列取得
   console.log('⛽ Estimating gas costs...');
+  console.log('   (scoring: gasCost + finality × $0.0001/s)');
   const allBalancesWithGas = await Promise.all(
     balances.map(async (b) => {
       const networkConfig = SUPPORTED_NETWORKS.find(n => n.network === b.network)!;
       const gasCostUSD = await getGasCostUSD(networkConfig);
-      console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas`);
-      return { ...b, gasCostUSD };
+      const finalitySeconds = networkConfig.finalitySeconds;
+      // score = gasCostUSD + finality_seconds * FINALITY_WEIGHT
+      const score = gasCostUSD + finalitySeconds * FINALITY_WEIGHT;
+      console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas · ${finalitySeconds}s finality · score $${score.toFixed(6)}`);
+      return { ...b, gasCostUSD, finalitySeconds, score };
     })
   );
 
-  // sufficientなチェーンの中でガス最安を選ぶ
   const sufficientWithGas = allBalancesWithGas.filter(b => b.sufficient);
   if (sufficientWithGas.length === 0) {
     throw new Error('Insufficient USDC balance on all supported networks');
   }
-  const best = sufficientWithGas.sort((a, b) => a.gasCostUSD - b.gasCostUSD)[0];
 
-  console.log(`💡 Selected: ${best.name} (${best.balanceFormatted} USDC · gas $${best.gasCostUSD.toFixed(6)})`);
+  // scoreが最小のネットワークを選択
+  const best = sufficientWithGas.sort((a, b) => a.score! - b.score!)[0];
+
+  console.log(`💡 Selected: ${best.name} (gas $${best.gasCostUSD!.toFixed(6)} · finality ${best.finalitySeconds}s · score $${best.score!.toFixed(6)})`);
 
   return {
     fetchWithPayment: wrapFetchWithPaymentFromConfig(fetch, {
