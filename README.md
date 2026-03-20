@@ -170,6 +170,21 @@ Traditional APIs require API keys, subscriptions, and manual billing. XFlow uses
 **For the Agent Economy:**
 SmartPaymentRouter doesn't just optimize for the caller — it reduces gas costs for the x402 facilitator too. The facilitator settles payments onchain on behalf of agents; by routing payments to the cheapest chain, the total gas burden across all settlements decreases. Lower facilitator costs mean more sustainable infrastructure for the agent economy as a whole.
 
+```
+Without SmartRouting:
+  10,000 agent payments/day
+  Average settlement gas: $0.005
+  Total facilitator cost: $50/day
+
+With SmartRouting:
+  10,000 agent payments/day
+  Average settlement gas: $0.002  ← cheapest chain selected automatically
+  Total facilitator cost: $20/day
+
+  → 60% cost reduction
+  → Sustainable at higher scale
+```
+
 ---
 
 ## Agent-to-Agent (A2A) + x402
