@@ -41,6 +41,7 @@ const TOKENS: Record<string, string> = {
   USDC: '0x74b7f16337b8972027f6196a17a631ac6de26d22',
   WOKB: '0xe538905cf8410324e03a5a23c1c177a474d59b2b',
   OKB:  '0xe538905cf8410324e03a5a23c1c177a474d59b2b',
+  USDT0: '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
 export interface SwapRequest {
@@ -58,7 +59,7 @@ export async function getSwapQuote(req: SwapRequest) {
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
   const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken||'').toUpperCase()]   || req.toToken   || '';
 
-  const stablecoins = ['USDC', 'USDT', 'USDG', 'DAI', 'CRVUSD'];
+  const stablecoins = ['USDC', 'USDT', 'USDT0', 'USDG', 'DAI', 'CRVUSD'];
   const fromSym = (req.fromTokenSymbol || req.fromToken || '').toUpperCase();
   const decimals = stablecoins.includes(fromSym) ? 6 : 18;
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
@@ -102,12 +103,11 @@ export async function getSwapTxData(req: SwapRequest) {
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
   const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken||'').toUpperCase()]   || req.toToken   || '';
 
-  const stablecoinsForTx = ['USDC', 'USDT', 'USDG', 'DAI', 'CRVUSD'];
+  const stablecoinsForTx = ['USDC', 'USDT', 'USDT0', 'USDG', 'DAI', 'CRVUSD'];
   const decimals = stablecoinsForTx.includes(req.fromToken.toUpperCase()) ? 6 : 18;
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
-  const slippage = req.slippage || '0.5';
+  const slippage = req.slippage || '1.0';
 
-  await sleep(1100);
 
   const safeFromAddr = fromAddr || undefined;
   const safeToAddr   = toAddr   || undefined;
