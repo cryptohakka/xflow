@@ -44,9 +44,6 @@ const TOKENS: Record<string, string> = {
   USDT0: '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
-// OKX DEX Router on X Layer（フォールバック用）
-const OKX_ROUTER_XLAYER = '0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f';
-
 export interface SwapRequest {
   fromToken: string;
   toToken: string;
@@ -76,16 +73,6 @@ export async function getSwapQuote(req: SwapRequest) {
   if (json.code !== '0') throw new Error(`OKX quote error: ${json.msg}`);
 
   const q = json.data[0];
-
-  // spender: dexRouterList から抽出を試みる。なければフォールバック
-  // OKX quote API は router / routerAddress / dexProtocol.router などいくつかのパスで返す
-  const routerEntry = q.dexRouterList?.[0];
-  const spender: string =
-    routerEntry?.router ||
-    routerEntry?.routerAddress ||
-    routerEntry?.dexProtocol?.[0]?.router ||
-    OKX_ROUTER_XLAYER;
-
   const addrToSymbol: Record<string, string> = {
     '0x74b7f16337b8972027f6196a17a631ac6de26d22': 'USDC',
     '0xe538905cf8410324e03a5a23c1c177a474d59b2b': 'WOKB',
@@ -94,7 +81,6 @@ export async function getSwapQuote(req: SwapRequest) {
   };
   const resolvedFromSymbol = (req.fromTokenAddress && addrToSymbol[req.fromTokenAddress.toLowerCase()]) || req.fromToken.toUpperCase();
   const resolvedToSymbol   = (req.toTokenAddress   && addrToSymbol[req.toTokenAddress.toLowerCase()])   || req.toToken.toUpperCase();
-
   return {
     fromToken: resolvedFromSymbol,
     toToken: resolvedToSymbol,
@@ -108,7 +94,6 @@ export async function getSwapQuote(req: SwapRequest) {
     toTokenUnitPrice: q.toToken?.tokenUnitPrice || '0',
     fromTokenAddress: fromAddr,
     toTokenAddress: toAddr,
-    spender,  // approve時のspenderアドレス
   };
 }
 
@@ -122,6 +107,7 @@ export async function getSwapTxData(req: SwapRequest) {
   const decimals = stablecoinsForTx.includes(req.fromToken.toUpperCase()) ? 6 : 18;
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
   const slippage = req.slippage || '1.0';
+
 
   const safeFromAddr = fromAddr || undefined;
   const safeToAddr   = toAddr   || undefined;

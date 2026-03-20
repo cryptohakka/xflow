@@ -69,7 +69,7 @@ const paymentConfig = {
       asset: USDC_ADDRESSES[network],
       extra: USDC_EIP712[network],
     })),
-    description: 'XFlow - AI-powered DEX swap on X Layer',
+    description: 'XFlow - AI-powered DEX swap quote on X Layer',
     mimeType: 'application/json',
     resource: `http://localhost:${process.env.PORT || 3010}/swap`,
   },
@@ -150,6 +150,10 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
   }
 });
 
+// ── POST /swap  (x402 protected) ──────────────────────────────
+// Quote + risk評価のみ返す。TX dataは含まない。
+// client-agentはこのレスポンスでallowance/approveを判断し、
+// broadcast直前に /tx を叩いてfresh TX dataを取得する。
 app.post('/swap', async (req: Request, res: Response) => {
   const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta } = req.body;
 
@@ -165,15 +169,14 @@ app.post('/swap', async (req: Request, res: Response) => {
       console.log(`   ${b.name}: ${b.balance} USDC ${b.sufficient ? '✅' : '❌'} · gas $${b.gasCostUSD?.toFixed(6) || 'n/a'}`);
     });
   }
-
   if (_routerMeta?.selectedNetwork) {
     console.log(`💡 Selected: ${_routerMeta.selectedNetwork} · gas $${Number(_routerMeta.selectedGasCostUSD).toFixed(6)}`);
   }
   console.log(`✅ XFlow got paid ($0.001 USDC)`);
   console.log('════════════════════════════════════════════════════════════\n');
 
-  // ── Phase 2: Swap pipeline ───────────────────────────────────
-  console.log('2️⃣  Swap Pipeline (X Layer)');
+  // ── Phase 2: Quote + Risk ────────────────────────────────────
+  console.log('2️⃣  Quote + Risk Assessment (X Layer)');
   console.log('════════════════════════════════════════════════════════════');
 
   try {
@@ -184,7 +187,45 @@ app.post('/swap', async (req: Request, res: Response) => {
       userAddress,
       fromTokenAddress,
       toTokenAddress,
+      quoteOnly: true,   // TX dataを生成しない（期限切れ防止）
     });
+    res.json({ success: true, result });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /tx  (x402 不要 — /swap で支払い済み) ───────────────
+// broadcast直前に呼ぶ。fresh TX dataを返す。
+// allowance/approveが済んでいる前提。
+app.post('/tx', async (req: Request, res: Response) => {
+  const { query, userAddress, fromTokenAddress, toTokenAddress } = req.body;
+
+  if (!query) return res.status(400).json({ error: 'query is required' });
+
+  console.log('\n════════════════════════════════════════════════════════════');
+  console.log('🔄 Fresh TX data requested');
+  console.log(`   query: "${query}"`);
+  console.log('════════════════════════════════════════════════════════════');
+
+  try {
+    const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
+    const result = await orchestrate(query, {
+      privateKey,
+      preferredNetwork: 'eip155:196',
+      userAddress,
+      fromTokenAddress,
+      toTokenAddress,
+      quoteOnly: false,  // TX dataあり
+    });
+
+    const tx = result?.data?.result?.tx;
+    if (!tx) {
+      console.warn('[/tx] No TX data in orchestrate result');
+      return res.status(500).json({ error: 'Failed to generate TX data' });
+    }
+
+    console.log(`✅ Fresh TX ready · to: ${tx.to}`);
     res.json({ success: true, result });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -204,7 +245,9 @@ const PORT = process.env.PORT || 3010;
 
   app.listen(PORT, () => {
     console.log(`\n🌊 XFlow Server running on http://localhost:${PORT}`);
-    console.log(`   POST /swap  — x402 protected (0.001 USDC · X Layer/Base/Polygon/Avalanche)`);
+    console.log(`   POST /swap  — x402 protected (0.001 USDC) · quote + risk only`);
+    console.log(`   POST /tx    — free · fresh TX data (call right before broadcast)`);
+    console.log(`   POST /confirm — x402 protected (0.001 USDC) · swap confirmation`);
     console.log(`   GET  /health — free\n`);
   });
 })();

@@ -73,18 +73,10 @@ export interface OrchestratorOptions {
   userAddress?: string;
   fromTokenAddress?: string;
   toTokenAddress?: string;
-  quoteOnly?: boolean;  // true = quote+risk のみ。TX dataを生成しない（/swap用）
-                        // false = TX dataまで生成（/tx用）
 }
 
 export async function orchestrate(query: string, options: OrchestratorOptions) {
-  const {
-    preferredNetwork = 'eip155:196',
-    userAddress,
-    fromTokenAddress,
-    toTokenAddress,
-    quoteOnly = false,
-  } = options;
+  const { preferredNetwork = 'eip155:196', userAddress, fromTokenAddress, toTokenAddress } = options;
 
   // Step 1: LLMでintent解析
   console.log(`🧠 Orchestrator parsing intent...`);
@@ -96,8 +88,10 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   }
 
   // Step 2: トークンアドレス解決
+  // fromTokenAddress/toTokenAddressが直接指定されていればLLM解析のfromToken/toTokenを無視
   const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC');
   const toResolved = await resolveToken(toTokenAddress || intent.toToken || 'WOKB');
+  // アドレスが直接指定された場合はそのシンボルを優先
   const fromSymbol = fromTokenAddress?.length
     ? (fromResolved.symbol || 'TOKEN')
     : (intent.fromToken || 'USDC');
@@ -151,6 +145,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   });
 
   if (!risk.approved) {
+    // Record rejected swap onchain
     try {
       await recordFailedSwapOnchain({
         agentAddress: userAddress || '0x0000000000000000000000000000000000000000',
@@ -171,30 +166,10 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  // quoteOnly=true の場合はTX dataを生成せずに返す（/swap エンドポイント用）
-  // client-agentはこのレスポンスでallowance/approveを判断し、
-  // approve完了後に /tx を叩いてfresh TX dataを取得する
-  if (quoteOnly) {
-    console.log(`✅ Quote+Risk approved · skipping TX generation (quoteOnly mode)`);
-    return {
-      intent,
-      network: preferredNetwork,
-      transaction: '',
-      data: {
-        status: 'approved',
-        risk,
-        quote,
-        result: null,  // TX dataなし
-        confirmEndpoint: '/confirm',
-        txEndpoint: '/tx',  // client-agentへのヒント
-      },
-    };
-  }
-
   // Rate limit: 1 req/sec
   await new Promise(r => setTimeout(r, 1100));
 
-  // Step 5: DEX Agent（TX data生成）
+  // Step 5: DEX Agent
   const result = await handleDexQuery(query, userAddress, quote);
 
   return {
