@@ -6,6 +6,8 @@
  * Payment:  x402 USDC $0.001 on Base (auto-paid via Agent0 SDK)
  */
 import { SDK } from 'agent0-sdk';
+import { recordX402PaymentOnchain, recordA2ACallOnchain } from './analyticsAgent.js';
+import { explorerLink } from './utils.js';
 
 const CLAWDMINT_A2A = 'https://clawdmint-api.vercel.app/a2a';
 
@@ -18,6 +20,7 @@ export interface SwapContext {
   fromAmount: string;
   toAmount: string;
   chainId?: number;
+  agentAddress?: string;
 }
 
 export interface ClawdMintAnalysis {
@@ -36,6 +39,7 @@ function extractReply(response: any): string {
 async function sendMessage(
   sdk: SDK,
   text: string,
+  agentAddress: string,
 ): Promise<{ reply: string; settlementTx: string | null }> {
   const params: any = {
     message: { role: 'user', parts: [{ type: 'text', text }] },
@@ -56,7 +60,14 @@ async function sendMessage(
     console.log(`⚡ Paying via x402 on Base...`);
     result = await result.x402Payment.pay(0);
     settlementTx = result.x402Settlement?.transaction ?? null;
-    console.log(`✅ Payment confirmed · tx: ${settlementTx}`);
+    console.log(`✅ Payment confirmed · tx: ${explorerLink(settlementTx, 'base')}`);
+    await recordX402PaymentOnchain({
+      agentAddress,
+      endpoint: '/clawdmint-a2a',
+      feePaid: '0.001',
+      paymentNetwork: 'base',
+      paymentTxHash: settlementTx || '',
+    }).catch((e: any) => console.warn('[ClawdMint] X402 record failed:', e.message));
   }
 
   return { reply: extractReply(result), settlementTx };
@@ -72,12 +83,11 @@ export async function analyzeSwapWithClawdMint(
 
   const sdk = new SDK({ chainId: 8453, rpcUrl, privateKey });
   const chainId = swap.chainId ?? 196;
+  const agentAddress = process.env.PAYEE_ADDRESS || swap.agentAddress || '0x0000000000000000000000000000000000000000';
 
   console.log(`\n════════════════════════════════════════════════════════════`);
   console.log(`3️⃣  A2A Session (ClawdMint)`);
   console.log(`════════════════════════════════════════════════════════════`);
-  console.log(`   Swap: ${swap.fromAmount} ${swap.fromToken} → ${swap.toAmount} ${swap.toToken}`);
-  console.log(`   TX:   ${swap.txHash}`);
 
   const prompt =
     `I just executed a DeFi swap via XFlow (an AI-powered DEX agent) on X Layer (chain ${chainId}). ` +
@@ -90,7 +100,7 @@ export async function analyzeSwapWithClawdMint(
   console.log(`\n🧠 XFlow → ClawdMint:`);
   console.log(`   "${prompt.slice(0, 100)}..."`);
 
-  const { reply, settlementTx } = await sendMessage(sdk, prompt);
+  const { reply, settlementTx } = await sendMessage(sdk, prompt, agentAddress);
   const settlements = settlementTx ? [settlementTx] : [];
 
   // Extract TX analysis and next actions from combined reply
@@ -102,12 +112,14 @@ export async function analyzeSwapWithClawdMint(
   console.log(`   TX Analysis:  ${txExplanation.slice(0, 120)}...`);
   console.log(`   Next Actions: Consider the USDT0/WOKB pool on Uniswap X Layer as a yield opportunity`);
   console.log(`   Pool: ${USDT0_WOKB_POOL}`);
-
-  console.log(`\n════════════════════════════════════════════════════════════`);
-  console.log(`✅ A2A Session complete`);
-  console.log(`💰 Total spent by XFlow: $0.001 USDC`);
-  if (settlementTx) console.log(`   Settlement: ${settlementTx}`);
-  console.log(`════════════════════════════════════════════════════════════\n`);
+  await recordA2ACallOnchain({
+    callerAgent:    agentAddress,
+    externalAgent:  'ClawdMint',
+    purpose:        'swap_confirmation',
+    feePaid:        '0.001',
+    paymentNetwork: 'base',
+  }).catch((e: any) => console.warn('[ClawdMint] A2A record failed:', e.message));
+  console.log(`════════════════════════════════════════════════════════════`);
 
   return {
     txExplanation,

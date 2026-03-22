@@ -68,6 +68,7 @@ Supported tokens on X Layer: ${tokenList}`,
 }
 
 export interface OrchestratorOptions {
+  parsedIntent?: ParsedIntent;
   privateKey: `0x${string}`;
   preferredNetwork?: string;
   userAddress?: string;
@@ -88,7 +89,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
 
   // Step 1: LLMでintent解析
   console.log(`🧠 Orchestrator parsing intent...`);
-  const intent = await parseIntent(query);
+  const intent = options.parsedIntent || await parseIntent(query);
   console.log(`   Parsed:`, JSON.stringify(intent));
 
   if (intent.action === 'unknown') {

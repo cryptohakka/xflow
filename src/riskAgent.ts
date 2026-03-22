@@ -115,7 +115,7 @@ export function evaluateRisk(input: RiskInput): RiskResult {
     };
   }
 
-  const impact = parseFloat(input.priceImpact.replace('%', ''));
+  const impact = Math.abs(parseFloat(input.priceImpact.replace('%', '')));
   const impactScore = scorePriceImpact(impact);
   const routeScore  = scoreRoute(input.route);
 

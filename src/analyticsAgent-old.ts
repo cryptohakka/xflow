@@ -172,6 +172,7 @@ export async function getDashboardData() {
   for (const p of recentX402Payments as any[]) {
     networkCount[p.paymentNetwork] = (networkCount[p.paymentNetwork] || 0) + 1;
   }
+
   for (const f of recentFailed as any[]) {
     reasonCount[f.reason] = (reasonCount[f.reason] || 0) + 1;
   }
