@@ -1,0 +1,8 @@
+services:
+  client-agent:
+    build: .
+    container_name: xflow-client-agent
+    network_mode: host
+    env_file:
+      - .env
+    restart: "no"
