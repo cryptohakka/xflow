@@ -220,20 +220,44 @@ src/
 │   └── XFlowAnalytics.sol  # Analytics contract (deployed · X Layer)
 └── public/
     └── dashboard.html      # Real-time dashboard
+
+client-agent/
+├── src/
+│   ├── index.ts            # Autonomous swap agent — full pipeline
+│   └── smartPaymentRouter.ts  # Chain selection (client-side)
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
 
 ## Quick Start
 
-### Run XFlow Server
+### Prerequisites
+
+Before you start, make sure you have:
+
+| Requirement | Purpose | How to get |
+|-------------|---------|------------|
+| `PRIVATE_KEY` (XFlow wallet) | Analytics TXs + ClawdMint A2A payments | Any EVM wallet |
+| OKX API key | OKX DEX Aggregator | [OKX Web3 Developer Portal](https://web3.okx.com) |
+| OpenRouter API key | LLM intent parsing (Gemini 2.5 Flash Lite) | [openrouter.ai](https://openrouter.ai) |
+| PayAI API key | x402 facilitator | [merchant.payai.network](https://merchant.payai.network) |
+| OKB on X Layer | Gas for swap TXs (XFlow server wallet) | OKX Exchange → withdraw to X Layer |
+| `PRIVATE_KEY` (client wallet) | x402 payments + swap broadcasting | Any EVM wallet |
+| USDC on Avalanche/Base/Polygon/X Layer | x402 payment source | Any DEX or CEX |
+| OKB on X Layer | Gas for swap TXs (client wallet) | OKX Exchange → withdraw to X Layer |
+
+---
+
+### Step 1 — Run XFlow Server
 
 ```bash
 git clone https://github.com/cryptohakka/xflow
 cd xflow
 cp .env.example .env
-# Fill in: PRIVATE_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE,
-#          OPENROUTER_API_KEY, PAYEE_ADDRESS, PAYAI_API_KEY_ID, PAYAI_API_KEY_SECRET
+# Edit .env — fill in all required values
 docker compose up -d
 ```
 
@@ -241,17 +265,63 @@ Dashboard: `http://localhost:3010`
 
 > **Security:** Use a dedicated wallet with minimal funds. Never commit `.env` to version control.
 
-### Call XFlow as an Agent
+`.env.example`:
+```bash
+PRIVATE_KEY=0x...            # XFlow server wallet (needs OKB on X Layer)
+OKX_API_KEY=                 # OKX Web3 Developer Portal
+OKX_SECRET_KEY=
+OKX_PASSPHRASE=
+OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
+ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
+PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
+PAYAI_API_KEY_ID=            # PayAI merchant portal
+PAYAI_API_KEY_SECRET=
+PORT=3010
+```
+
+---
+
+### Step 2 — Run Client Agent
+
+The included client agent autonomously sends swap requests to XFlow using x402 micropayments.
+
+```bash
+cd client-agent
+cp .env.example .env
+# Edit .env — fill in your wallet and swap query
+docker compose up
+```
+
+`client-agent/.env.example`:
+```bash
+PRIVATE_KEY=0x...                    # Your wallet (needs USDC on supported chain + OKB on X Layer)
+XFLOW_URL=http://localhost:3010      # XFlow server URL
+SWAP_QUERY=swap 0.01 USDC to USDT0  # Natural language swap instruction
+```
+
+That's it. The agent will:
+1. Scan USDC balances across 4 chains and select the optimal payment chain
+2. Pay $0.001 USDC to XFlow via x402
+3. Receive a quote + risk assessment
+4. Sign and broadcast the swap TX on X Layer
+5. Pay $0.001 USDC to confirm the swap
+6. Receive TX analysis from ClawdMint (agent pays agent automatically)
+
+Watch the dashboard at `http://localhost:3010` to see everything recorded onchain in real time.
+
+---
+
+### Step 3 — Use Your Own Agent
+
+XFlow is a standard HTTP API with x402 payment protection. Any x402-compatible agent can call it directly.
 
 ```typescript
-import { createSmartPaymentFetch } from './src/smartPaymentRouter.js';
-import { createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
+import { createSmartPaymentFetch } from './smartPaymentRouter.js';
 
-// SmartPaymentRouter auto-selects optimal chain
+// SmartPaymentRouter auto-selects optimal payment chain
 const { fetchWithPayment, selectedNetwork } = await createSmartPaymentFetch(PRIVATE_KEY);
 
-// POST /swap — x402 payment + quote + risk assessment
+// POST /swap — pays $0.001 USDC automatically, returns quote + risk
 const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -260,54 +330,10 @@ const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
     userAddress: '0x...',
   }),
 });
-const { result } = await swapRes.json();
-const quote = result.data.quote;
-
-// POST /tx — fresh TX data right before broadcast (avoids quote expiry)
-const txRes = await fetch('http://localhost:3010/tx', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    query: 'swap 0.01 USDC to USDT0',
-    userAddress: '0x...',
-    fromTokenAddress: quote.fromTokenAddress,
-    toTokenAddress: quote.toTokenAddress,
-  }),
-});
-const { result: txResult } = await txRes.json();
-const tx = txResult.data.result.tx;
-
-// Agent signs & broadcasts (requires OKB on X Layer for gas)
-const walletClient = createWalletClient({ account, chain: xlayer, transport: http() });
-const txHash = await walletClient.sendTransaction({
-  to: tx.to, data: tx.data,
-  gas: BigInt(Math.floor(Number(tx.gas) * 1.5)),
-  gasPrice: BigInt(tx.gasPrice),
-  chainId: 196,
-});
-
-// POST /confirm — triggers Analytics + ClawdMint A2A automatically
-const confirmRes = await fetchWithPayment('http://localhost:3010/confirm', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    txHash,
-    fromToken: quote.fromToken,
-    toToken: quote.toToken,
-    fromAmount: quote.fromAmount,
-    toAmount: quote.toAmount,
-    paymentNetwork: selectedNetwork.network,
-    route: quote.route,
-    riskLevel: result.data.risk.riskLevel,
-    agentAddress: account.address,
-  }),
-});
-const { clawdmint } = await confirmRes.json();
-// clawdmint.txExplanation  — AI analysis of the swap
-// clawdmint.nextActions    — suggested next moves
 ```
 
----
+See [API Reference](#api-reference) for the full integration guide.
+
 
 ## API Reference
 
