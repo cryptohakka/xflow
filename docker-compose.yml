@@ -9,3 +9,5 @@ services:
     environment:
       - PORT=3010
       - NODE_NO_WARNINGS=1
+    volumes:
+      - ./gas_saved.json:/app/gas_saved.json

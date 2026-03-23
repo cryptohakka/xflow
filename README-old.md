@@ -1,31 +1,126 @@
-# XFlow
+# XFlow — AI Agent Payment Infrastructure on X Layer
 
-**AI Agent Payment Infrastructure on X Layer**
+> **AI agents that pay each other. No API keys. No subscriptions. No humans in the loop.**
 
-XFlow is a multi-agent system that enables AI agents to autonomously execute DeFi operations using x402 micropayments. Any agent holding USDC on any supported chain can pay and access XFlow's swap pipeline — no API keys, no subscriptions, pay only what you use.
+XFlow is a production-deployed multi-agent system where AI agents autonomously execute DeFi swaps on X Layer, pay for services using x402 micropayments ($0.001 USDC/call), and consult external AI agents — all without human intervention. Every payment, swap, and agent-to-agent call is recorded onchain.
 
-> **Disclaimer:** This software is provided for experimental and educational purposes only. It is not financial advice. Use at your own risk. DeFi transactions are irreversible — always verify parameters before signing.
+**[🎬 Demo Video](#)** · **[📊 Live Dashboard](#)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)**
 
 ---
 
-## Table of Contents
+## The Problem
 
-- [Architecture](#architecture)
-- [Key Features](#key-features)
-- [Why XFlow](#why-xflow)
-- [Agent-to-Agent (A2A) + x402](#agent-to-agent-a2a--x402)
-- [How XFlow Compares](#how-xflow-compares)
-- [Supported Payment Networks](#supported-payment-networks-x402)
-- [Onchain Contracts](#onchain-contracts-x-layer)
-- [Quick Start](#quick-start)
-- [API Reference](#api-reference)
-- [Pipeline Flow](#pipeline-flow)
-- [Risk Agent Logic](#risk-agent-logic)
-- [Gas Model](#gas-model)
-- [Known Limitations](#known-limitations)
-- [Environment Variables](#environment-variables)
-- [Roadmap](#roadmap)
-- [Built With](#built-with)
+Today's AI agents can reason, plan, and act — but they can't pay. Every API they call requires a human to set up an API key, subscribe to a plan, and manage billing. This is a fundamental bottleneck for autonomous agent systems.
+
+**The result:** Agents that need a human babysitter for every dollar they spend.
+
+---
+
+## What XFlow Does
+
+XFlow is the payment and execution layer for AI agents operating in DeFi. An agent sends a natural language swap request, pays $0.001 USDC automatically from whichever chain scores best, and gets back an executed trade on X Layer — with post-swap analysis from a second AI agent that also gets paid automatically.
+
+```
+Agent says:  "swap 0.01 USDC to USDT0"
+             ↓
+XFlow:       Selects optimal payment chain in 796ms
+             Pays $0.001 USDC via x402
+             Quotes + risk checks the swap
+             Executes on X Layer via OKX DEX Aggregator
+             Pays ClawdMint AI $0.001 for TX analysis
+             Returns result + next action suggestions
+             Records everything onchain
+```
+
+No API keys. No subscriptions. No humans.
+
+---
+
+## Live Stats (Onchain · X Layer)
+
+| Metric | Value |
+|--------|-------|
+| Unique AI Agents | 3 |
+| Total Swaps Executed | 23 |
+| Total x402 Payments | 61 |
+| A2A Calls (Agent→Agent) | 22 |
+| Total Fees Earned | $0.061 |
+| Avg. Decision Latency | 796ms |
+| Execution Success Rate | 100% |
+| Avg. Slippage | 0.065% |
+
+*All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e)*
+
+---
+
+## The Core Innovation: Three Layers Working Together
+
+### 1. x402 — HTTP-Native Micropayments
+
+x402 turns API access into a pay-per-use primitive. When an agent calls `POST /swap`, the server returns HTTP 402 with payment requirements. The agent's wallet signs a USDC transfer, and the request proceeds automatically — no API keys, no OAuth, no billing portal.
+
+```
+Agent → POST /swap
+Server ← 402 Payment Required (USDC · any of 4 chains)
+Agent → POST /swap + x402 payment header
+Server ← 200 OK + swap result
+```
+
+XFlow accepts x402 payments on **4 chains simultaneously**: X Layer, Base, Polygon, Avalanche.
+
+### 2. SmartPaymentRouter — Optimal Chain Selection
+
+Paying on the wrong chain wastes money and time. SmartPaymentRouter scans USDC balances across all supported chains and selects the optimal one using a composite score:
+
+```
+score = gasCost + finality × $0.0001/s
+```
+
+Lower score = better route. An agent with USDC on Avalanche pays ~$0.000025 in gas vs ~$0.001315 on Base — a **52x difference**. SmartPaymentRouter makes this decision automatically, every time.
+
+```
+⛽ Estimating gas costs...
+   Polygon:   $0.001168 gas · 5s finality   → score $0.001668
+   Base:      $0.001315 gas · 2s finality   → score $0.001515
+   X Layer:   $0.000089 gas · 1s finality   → score $0.000189
+   Avalanche: $0.000025 gas · 0.8s finality → score $0.000105  ✓ selected
+```
+
+**This also benefits the x402 facilitator.** The facilitator is a third-party service that settles x402 payments onchain on behalf of agents — absorbing the gas cost of every settlement. By routing payments to the cheapest chain, SmartPaymentRouter reduces the facilitator's gas burden across the entire ecosystem:
+
+```
+Without SmartRouting:
+  10,000 agent payments/day × $0.005 avg settlement gas = $50/day facilitator cost
+
+With SmartRouting:
+  10,000 agent payments/day × $0.002 avg settlement gas = $20/day facilitator cost
+
+  → 60% cost reduction for the facilitator
+  → More sustainable infrastructure for the agent economy at scale
+```
+
+SmartPaymentRouter is a systemic improvement — not just a per-agent optimization.
+
+### 3. Agent-to-Agent (A2A) — Agents Paying Agents
+
+After each confirmed swap, XFlow autonomously calls **ClawdMint** — an external AI agent — via the A2A protocol (JSON-RPC 2.0 / ERC-8004). XFlow pays ClawdMint $0.001 USDC using x402, receives a TX explanation and next-action suggestions, and passes them back to the caller.
+
+This is the complete agentic payment loop: **human → agent → agent → agent**, with every hop paid automatically and recorded onchain.
+
+```
+User Agent
+    │  x402 $0.001 (Avalanche)
+    ▼
+XFlow Orchestrator
+    │  parallel dispatch
+    ├──▶ DEX Agent (OKX Aggregator)
+    ├──▶ Risk Agent (slippage guard)
+    └──▶ Analytics Agent (onchain record)
+    │
+    │  agent0-sdk + x402 $0.001 (Base)
+    ▼
+ClawdMint (external AI · swap confirmation)
+```
 
 ---
 
@@ -34,308 +129,293 @@ XFlow is a multi-agent system that enables AI agents to autonomously execute DeF
 ```
 External Agent / User
         │
-        │  x402 payment (any chain: Base / Polygon / Avalanche / X Layer)
+        │  x402 payment ($0.001 USDC · optimal chain selected automatically)
         ▼
 ┌─────────────────────────┐
-│   Smart Payment Router  │  ← Auto-selects cheapest chain by gas cost (USD)
-│   x402 Payment Adapter  │  ← Handles 402 handshake automatically
+│   Smart Payment Router  │  ← score = gasCost + finality × $0.0001/s
+│   x402 Payment Adapter  │  ← handles 402 handshake transparently
 └────────────┬────────────┘
              │
              ▼
 ┌─────────────────────────┐
-│      Orchestrator       │  ← LLM-powered intent parsing (Gemini 2.5 Flash Lite)
+│      Orchestrator       │  ← LLM intent parsing (Gemini 2.5 Flash Lite)
 └────────────┬────────────┘
              │
      ┌───────┴───────┐
      ▼               ▼
 ┌─────────┐   ┌─────────────┐
 │  Risk   │   │  DEX Agent  │  ← OKX DEX Aggregator API
-│  Agent  │   │             │  ← Generates unsigned swap TX on X Layer
+│  Agent  │   │             │  ← unsigned swap TX on X Layer
 └────┬────┘   └──────┬──────┘
-     │               │
      └───────┬───────┘
-             │
-             ▼ (unsigned TX returned to Agent)
-             │
+             ▼
     Agent signs & broadcasts on X Layer
-    (requires OKB for gas)
              │
-             ▼ (POST /confirm with swap txHash)
-     ┌───────┴───────────────┐
-     ▼                       ▼
-┌─────────────────┐   ┌──────────────────────┐
-│ Analytics Agent │   │  ClawdMint A2A Agent │  ← A2A + x402 auto-payment
-│ (onchain record)│   │  TX explanation      │  ← Next action suggestions
-└────────┬────────┘   └──────────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│      Dashboard          │  ← Real-time visualization
-│  (XFlowAnalytics.sol)   │  ← Deployed on X Layer
-│  TX hash explorer links │
-│  Cumulative volume      │
-└─────────────────────────┘
+             ▼  POST /confirm
+     ┌───────┴────────────────┐
+     ▼                        ▼
+┌──────────────────┐  ┌──────────────────────┐
+│ Analytics Agent  │  │  ClawdMint A2A Agent │  ← x402 autopayment
+│ XFlowAnalytics   │  │  TX explanation      │  ← next action suggestions
+│ .sol (X Layer)   │  └──────────────────────┘
+└──────────────────┘
 ```
 
 ---
 
-## Key Features
+## Sequence Diagram
 
-- **Smart Payment Router** — Checks USDC balances across all supported chains and automatically selects the cheapest by gas cost. Handles the x402 402-handshake transparently — any x402-compatible agent can call XFlow without worrying about which chain to pay from.
-- **LLM Intent Parsing** — Natural language → structured swap parameters via Gemini 2.5 Flash Lite (OpenRouter).
-- **Risk Agent** — Evaluates price impact, amount size, and route quality before execution. Rejects HIGH risk swaps automatically. See [Risk Agent Logic](#risk-agent-logic).
-- **DEX Agent** — Fetches unsigned swap TX data via OKX OnchainOS DEX Aggregator API on X Layer.
-- **Analytics Agent** — Records all swap activity onchain via `XFlowAnalytics.sol` on X Layer — successful swaps and Risk Agent rejections both captured.
-- **ClawdMint A2A** — After each confirmed swap, XFlow autonomously calls ClawdMint via Agent-to-Agent (A2A) protocol with x402 micropayment. Returns TX explanation and next action suggestions.
-- **Real-time Dashboard** — Visualizes agent activity, payment chains, DEX routes, cumulative volume, and TX hash explorer links.
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Router as SmartPaymentRouter
+    participant XFlow as XFlow Server
+    participant OKX as OKX DEX API
+    participant Risk as Risk Agent
+    participant Chain as X Layer
+    participant Analytics as XFlowAnalytics.sol
+    participant ClawdMint
 
----
+    Agent->>Router: createSmartPaymentFetch()
+    Router-->>Agent: optimal chain selected (lowest score)
 
-## Why XFlow?
+    Agent->>XFlow: POST /swap (x402 $0.001 USDC)
+    XFlow->>OKX: fetch quote
+    OKX-->>XFlow: quote + route
+    XFlow->>Risk: evaluate risk
+    Risk-->>XFlow: LOW / MEDIUM / HIGH
+    XFlow-->>Agent: quote + risk (no TX data)
 
-> x402 kills subscriptions. Pay only when you use it.
+    Agent->>Agent: check allowance → approve if needed
+    Agent->>XFlow: POST /tx (free · fresh TX data)
+    XFlow->>OKX: fetch swap TX
+    OKX-->>XFlow: unsigned TX
+    XFlow-->>Agent: fresh TX data
 
-Traditional APIs require API keys, subscriptions, and manual billing. XFlow uses x402 — HTTP-native micropayments where AI agents pay $0.001 per call in USDC, automatically, from whichever chain is cheapest at that moment.
+    Agent->>Chain: sign & broadcast TX
+    Chain-->>Agent: txHash
 
-**For AI Agents:**
-- No API keys needed
-- No subscriptions
-- Pay from any chain — SmartPaymentRouter handles the rest
-- Full onchain audit trail of every swap
-- Post-swap AI analysis via ClawdMint A2A (agent pays agent, automatically)
-
----
-
-## Agent-to-Agent (A2A) + x402
-
-XFlow demonstrates the full agentic payment stack: not just human→agent payments, but **agent→agent payments**.
-
-After a successful swap, XFlow automatically:
-1. Calls ClawdMint's A2A endpoint
-2. Pays for the analysis using x402 (USDC micropayment, no human involved)
-3. Returns TX explanation and suggested next actions to the caller
-
-This is the core loop of the AI agent economy — agents autonomously paying other agents for services, settled onchain, with no human in the loop.
-
----
-
-## How XFlow Compares
-
-| | Traditional API | Bridge + DEX | XFlow |
-|--|--|--|--|
-| **Payment** | Credit card / subscription | Manual onchain TX | x402 micropayment ($0.001) |
-| **Chain flexibility** | Single chain | Bridge required (5-30 min) | Any chain, instant |
-| **API call gas** | No | Yes | No (x402 via facilitator) |
-| **Swap execution gas** | No | Yes | Yes (OKB on X Layer) |
-| **For AI Agents** | API keys needed | Complex multi-step | Single HTTP request |
-| **Automation** | Possible | Difficult | Native |
-| **Cost** | Fixed monthly | Bridge fee + gas | Pay per use |
-| **Audit trail** | Centralized logs | Onchain | Onchain (X Layer) |
-| **Agent→Agent** | Not supported | Not supported | Native (A2A + x402) |
-
-### The Key Insight
-
-> Before XFlow: To use a service on X Layer, you needed X Layer USDC + X Layer gas.
->
-> With XFlow: You need USDC on **any** supported chain. XFlow's Smart Payment Router finds the cheapest chain automatically — no bridging, no gas tokens needed for the API call itself.
-
-**Example:**
-```
-Without XFlow:
-1. Check which chain the service accepts
-2. Bridge USDC to that chain (wait 5-30 min, pay bridge fee)
-3. Get gas token for that chain
-4. Finally call the service
-
-With XFlow:
-1. Call the service → Smart Payment Router handles the x402 payment
-2. Sign & broadcast the returned swap TX on X Layer (requires OKB for gas)
+    Agent->>XFlow: POST /confirm (x402 $0.001 USDC)
+    XFlow->>Analytics: recordSwap() onchain
+    XFlow->>ClawdMint: A2A call (x402 autopayment $0.001)
+    ClawdMint-->>XFlow: TX explanation + next actions
+    XFlow-->>Agent: result + suggestions
 ```
 
 ---
 
-## Supported Payment Networks (x402)
+## Source Structure
 
-| Chain | Network ID | USDC Address |
-|-------|-----------|------|
-| X Layer | `eip155:196` | `0x74b7f16337b8972027f6196a17a631ac6de26d22` |
-| Base | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Polygon | `eip155:137` | `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359` |
-| Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` |
+```
+src/
+├── server.ts               # Express server — /swap, /tx, /confirm, /dashboard
+├── smartPaymentRouter.ts   # Chain selection: score = gasCost + finality × $0.0001/s
+├── orchestrator.ts         # LLM intent parsing (Gemini 2.5 Flash Lite)
+├── riskAgent.ts            # Risk evaluation — price impact + route quality
+├── dexAgent.ts             # OKX DEX Aggregator — quote + TX data
+├── tokenResolver.ts        # Token address resolution
+├── analyticsAgent.ts       # Onchain swap + x402 + A2A recording
+├── clawdmintA2A.ts         # A2A + x402 call to ClawdMint (agent0-sdk)
+├── contracts/
+│   └── XFlowAnalytics.sol  # Analytics contract (deployed · X Layer)
+└── public/
+    └── dashboard.html      # Real-time dashboard
 
----
-
-## Onchain Contracts (X Layer)
-
-| Contract | Address | Explorer |
-|----------|---------|---------|
-| XFlowAnalytics | `0xf88A47a15fAa310E11c67568ef934141880d473e` | [View](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e) |
+client-agent/
+├── src/
+│   ├── index.ts            # Autonomous swap agent — full pipeline
+│   └── smartPaymentRouter.ts  # Chain selection (client-side)
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
+```
 
 ---
 
 ## Quick Start
 
-### 1. Run XFlow Server
+### Prerequisites
+
+Before you start, make sure you have:
+
+| Requirement | Purpose | How to get |
+|-------------|---------|------------|
+| `PRIVATE_KEY` (XFlow wallet) | Analytics TXs + ClawdMint A2A payments | Any EVM wallet |
+| OKX API key | OKX DEX Aggregator | [OKX Web3 Developer Portal](https://web3.okx.com) |
+| OpenRouter API key | LLM intent parsing (Gemini 2.5 Flash Lite) | [openrouter.ai](https://openrouter.ai) |
+| PayAI API key | x402 facilitator | [merchant.payai.network](https://merchant.payai.network) |
+| OKB on X Layer | Gas for swap TXs (XFlow server wallet) | OKX Exchange → withdraw to X Layer |
+| `PRIVATE_KEY` (client wallet) | x402 payments + swap broadcasting | Any EVM wallet |
+| USDC on Avalanche/Base/Polygon/X Layer | x402 payment source | Any DEX or CEX |
+| OKB on X Layer | Gas for swap TXs (client wallet) | OKX Exchange → withdraw to X Layer |
+
+---
+
+### Step 1 — Run XFlow Server
 
 ```bash
 git clone https://github.com/cryptohakka/xflow
 cd xflow
 cp .env.example .env
-# Fill in PRIVATE_KEY, OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE, OPENROUTER_API_KEY
+# Edit .env — fill in all required values
 docker compose up -d
 ```
 
-> **Security note:** Never commit `.env` to version control. Use a dedicated wallet with only the funds needed for operation. For production deployments, consider a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.) instead of plaintext env files.
+Dashboard: `http://localhost:3010`
 
-### 2. Call XFlow as an Agent (Smart Payment Router)
+> **Security:** Use a dedicated wallet with minimal funds. Never commit `.env` to version control.
 
-```typescript
-import { createSmartPaymentFetch } from './src/smartPaymentRouter.js';
-import { createWalletClient, http } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-
-// Step 1: Auto-selects cheapest chain with sufficient USDC balance
-const { fetchWithPayment } = await createSmartPaymentFetch(PRIVATE_KEY);
-
-const res = await fetchWithPayment('http://localhost:3010/swap', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    query: 'swap 1 USDC to OKB',
-    userAddress: '0x...',
-  }),
-});
-
-const data = await res.json();
-const tx = data.result.data.result.tx;
-
-// Step 2: Agent signs & broadcasts the unsigned TX
-// Note: requires OKB on X Layer for gas
-const walletClient = createWalletClient({ ... });
-const swapHash = await walletClient.sendTransaction({
-  to: tx.to, data: tx.data,
-  gas: BigInt(tx.gas),
-  gasPrice: BigInt(tx.gasPrice),
-  chainId: 196,
-});
-
-// Step 3: Confirm successful swap (triggers Analytics + ClawdMint A2A)
-const confirm = await fetch('http://localhost:3010/confirm', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    txHash: swapHash,
-    fromToken: 'USDC', toToken: 'WOKB',
-    fromAmount: '1.0', toAmount: '0.010417',
-    paymentNetwork: 'eip155:43114',
-    route: 'Uniswap V3',
-    riskLevel: 'LOW',
-    agentAddress: '0x...',
-  }),
-});
-
-const result = await confirm.json();
-// result.clawdmint.txExplanation  — AI explanation of the swap TX
-// result.clawdmint.nextActions    — suggested follow-up actions
-```
-
-### 3. Manual x402 Payment (specific chain)
-
-```typescript
-import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
-import { ExactEvmScheme } from '@x402/evm';
-import { privateKeyToAccount } from 'viem/accounts';
-
-const account = privateKeyToAccount(PRIVATE_KEY);
-const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{ network: 'eip155:196', client: new ExactEvmScheme(account) }],
-});
-
-const res = await fetchWithPayment('http://localhost:3010/swap', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ query: 'swap 0.01 USDC to OKB', userAddress: '0x...' }),
-});
+`.env.example`:
+```bash
+PRIVATE_KEY=0x...            # XFlow server wallet (needs OKB on X Layer)
+OKX_API_KEY=                 # OKX Web3 Developer Portal
+OKX_SECRET_KEY=
+OKX_PASSPHRASE=
+OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
+ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
+PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
+PAYAI_API_KEY_ID=            # PayAI merchant portal
+PAYAI_API_KEY_SECRET=
+PORT=3010
 ```
 
 ---
 
-## API Reference
+### Step 2 — Run Client Agent
 
-### `POST /swap` (x402 protected · $0.001 USDC)
+The included client agent autonomously sends swap requests to XFlow using x402 micropayments.
 
-Request:
-```json
-{
-  "query": "swap 1 USDC to OKB",
-  "userAddress": "0x..."
-}
+```bash
+cd client-agent
+cp .env.example .env
+# Edit .env — fill in your wallet and swap query
+docker compose up
 ```
 
-Response:
+`client-agent/.env.example`:
+```bash
+PRIVATE_KEY=0x...                    # Your wallet (needs USDC on supported chain + OKB on X Layer)
+XFLOW_URL=http://localhost:3010      # XFlow server URL
+SWAP_QUERY=swap 0.01 USDC to USDT0  # Natural language swap instruction
+```
+
+That's it. The agent will:
+1. Scan USDC balances across 4 chains and select the optimal payment chain
+2. Pay $0.001 USDC to XFlow via x402
+3. Receive a quote + risk assessment
+4. Sign and broadcast the swap TX on X Layer
+5. Pay $0.001 USDC to confirm the swap
+6. Receive TX analysis from ClawdMint (agent pays agent automatically)
+
+Watch the dashboard at `http://localhost:3010` to see everything recorded onchain in real time.
+
+---
+
+### Step 3 — Use Your Own Agent
+
+XFlow is a standard HTTP API with x402 payment protection. Any x402-compatible agent can call it directly.
+
+```typescript
+import { createSmartPaymentFetch } from './smartPaymentRouter.js';
+
+// SmartPaymentRouter auto-selects optimal payment chain
+const { fetchWithPayment, selectedNetwork } = await createSmartPaymentFetch(PRIVATE_KEY);
+
+// POST /swap — pays $0.001 USDC automatically, returns quote + risk
+const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'swap 0.01 USDC to USDT0',
+    userAddress: '0x...',
+  }),
+});
+```
+
+See [API Reference](#api-reference) for the full integration guide.
+
+
+## API Reference
+
+### `POST /swap` — x402 protected · $0.001 USDC
+
+Returns quote and risk assessment. Does **not** include TX data — call `/tx` right before broadcast.
+
 ```json
+// Request
+{ "query": "swap 0.01 USDC to USDT0", "userAddress": "0x..." }
+
+// Response
 {
   "success": true,
+  "decisionMs": 796,
   "result": {
-    "intent": { "action": "swap", "fromToken": "USDC", "toToken": "WOKB", "amount": "1" },
+    "intent": { "action": "swap", "fromToken": "USDC", "toToken": "USDT0", "amount": "0.01" },
     "data": {
-      "status": "approved",
-      "risk": { "riskLevel": "LOW", "riskScore": 5, "approved": true },
-      "quote": { "fromAmount": "1", "toAmount": "0.010417", "route": "Uniswap V3" },
-      "result": {
-        "tx": {
-          "to": "0xD1b8...",
-          "data": "0x...",
-          "gas": "930231",
-          "gasPrice": "20000001",
-          "chainId": 196
-        },
-        "note": "Sign and send this TX to execute the swap on X Layer"
+      "risk": { "riskLevel": "LOW", "approved": true },
+      "quote": {
+        "fromToken": "USDC", "toToken": "USDT0",
+        "fromAmount": "0.01", "toAmount": "0.010016",
+        "route": "OkxStableSwap", "priceImpact": "0.00%"
       }
     }
   }
 }
 ```
 
-### `POST /confirm` (free · call after successful swap)
+### `POST /tx` — free · call immediately before broadcast
 
-Records the swap onchain and triggers ClawdMint A2A analysis automatically.
+Fetches fresh TX data. Call **after** approve, **immediately** before broadcast.
 
-Request:
 ```json
+// Request
 {
-  "txHash": "0x...",
-  "fromToken": "USDC",
-  "toToken": "WOKB",
-  "fromAmount": "1.0",
-  "toAmount": "0.010417",
-  "paymentNetwork": "eip155:43114",
-  "route": "Uniswap V3",
-  "riskLevel": "LOW",
-  "agentAddress": "0x..."
+  "query": "swap 0.01 USDC to USDT0",
+  "userAddress": "0x...",
+  "fromTokenAddress": "0x74b7...",
+  "toTokenAddress": "0x1e4a..."
+}
+
+// Response
+{
+  "success": true,
+  "result": { "data": { "result": {
+    "tx": { "to": "0xD1b8...", "data": "0x...", "gas": "930231", "gasPrice": "20000001", "chainId": 196 }
+  }}}
 }
 ```
 
-Response:
+### `POST /confirm` — x402 protected · $0.001 USDC
+
+Records swap onchain and triggers ClawdMint A2A analysis.
+
 ```json
+// Request
+{
+  "txHash": "0x...", "fromToken": "USDC", "toToken": "USDT0",
+  "fromAmount": "0.01", "toAmount": "0.010016",
+  "paymentNetwork": "eip155:43114", "route": "OkxStableSwap",
+  "riskLevel": "LOW", "agentAddress": "0x..."
+}
+
+// Response
 {
   "success": true,
   "analyticsTx": "0x...",
   "clawdmint": {
-    "txExplanation": "Swapped 1 USDC for 0.010417 WOKB via Uniswap V3 on X Layer...",
-    "nextActions": ["Monitor WOKB price", "Consider DCA strategy"],
+    "txExplanation": "Swapped 0.01 USDC for 0.010016 USDT0 via OkxStableSwap on X Layer...",
+    "nextActions": "Deploy USDT0 to USDT0/WOKB pool on Uniswap X Layer",
     "paidWithX402": true,
-    "settlements": [],
     "note": "Powered by ClawdMint via A2A + x402"
   }
 }
 ```
 
-### `GET /dashboard` (free)
+### `GET /dashboard` — free
 
-Returns real-time analytics from `XFlowAnalytics.sol`, including cumulative volume and TX hashes.
+Real-time analytics from XFlowAnalytics.sol. Includes `avgDecisionMs` and `totalGasSavedUSD` from session memory.
 
-### `GET /health` (free)
+### `GET /health` — free
 
 ```json
 { "status": "ok", "service": "XFlow", "version": "0.1.0" }
@@ -343,120 +423,120 @@ Returns real-time analytics from `XFlowAnalytics.sol`, including cumulative volu
 
 ---
 
-## Pipeline Flow
-
-```
-1.  Agent sends natural language swap request + x402 payment ($0.001 USDC)
-2.  Smart Payment Router checks USDC balances across 4 chains
-3.  Cheapest chain selected by gas cost (USD-denominated)
-4.  x402 payment settled by payai facilitator
-5.  Orchestrator parses intent with Gemini 2.5 Flash Lite
-6.  Risk Agent evaluates price impact & slippage → approves or rejects
-7.  DEX Agent fetches unsigned swap TX via OKX OnchainOS DEX Aggregator on X Layer
-8.  Agent receives unsigned TX → signs & broadcasts on X Layer (OKB gas required)
-9.  On success: Agent calls POST /confirm
-10. Analytics Agent records swap onchain (XFlowAnalytics.sol, X Layer)
-11. ClawdMint A2A Agent analyzes TX via A2A + x402 (agent pays agent)
-12. Dashboard reflects new swap: TX hash explorer link + cumulative volume update
-```
-
----
-
 ## Risk Agent Logic
 
-The Risk Agent evaluates every swap before execution. Source: [`src/riskAgent.ts`](./src/riskAgent.ts)
+Every swap is evaluated before execution. Source: [`src/riskAgent.ts`](./src/riskAgent.ts)
 
-**Scoring criteria:**
+| Factor | Score 0 | Score 1 | Score 2 | Score 3 | Score 4 |
+|--------|---------|---------|---------|---------|---------|
+| Price impact | ≤ 0% | < 0.1% | 0.1–0.5% | 0.5–2% | > 2% |
+| Route quality | Known DEX | — | Unknown route | — | — |
 
-| Factor | LOW (0–3) | MEDIUM (4–6) | HIGH (7–10) |
-|--------|-----------|--------------|-------------|
-| Price impact | < 0.5% | 0.5–2% | > 2% |
-| Swap amount (USDC) | < 10 | 10–100 | > 100 |
-| Route quality | Known DEX, deep liquidity | Single hop, moderate liquidity | Unknown route or thin liquidity |
-
-**Decision logic (pseudocode):**
 ```
-riskScore = priceImpactScore + amountScore + routeScore
+finalScore = max(priceImpactScore, routeScore)
 
-if riskScore >= 7:
-  riskLevel = HIGH  → REJECTED
-elif riskScore >= 4:
-  riskLevel = MEDIUM → APPROVED with warning
-else:
-  riskLevel = LOW   → APPROVED
+≥ 4  → HIGH    → rejected + recorded onchain
+≥ 2  → MEDIUM  → approved with warning
+< 2  → LOW     → approved
 ```
 
-HIGH risk swaps are rejected before the unsigned TX is generated. The rejection is recorded onchain via `recordFailedSwap`.
+HIGH and UNKNOWN swaps are rejected before TX generation. All rejections recorded via `recordFailedSwap()`.
 
 ---
 
 ## Gas Model
 
-XFlow has two distinct gas surfaces — it's important to understand both:
+XFlow has two distinct gas surfaces:
 
 | Step | Gas required | Paid by | Chain |
 |------|-------------|---------|-------|
-| x402 API call (`POST /swap`) | No | Facilitator handles settlement | Any supported chain |
-| Swap TX broadcast | **Yes** | Agent (caller) | X Layer (OKB) |
-| Analytics record | Yes | XFlow server wallet | X Layer (OKB) |
-| ClawdMint A2A call | No (x402) | XFlow server wallet (USDC) | Any supported chain |
+| `POST /swap` API call | No | x402 facilitator (USDC) | Any supported chain |
+| `POST /confirm` API call | No | x402 facilitator (USDC) | Any supported chain |
+| Swap TX broadcast | **Yes (OKB)** | Calling agent | X Layer |
+| Analytics record | Yes (OKB) | XFlow server wallet | X Layer |
+| ClawdMint A2A call | No (x402 USDC) | XFlow server wallet | Base |
 
-**In short:** Calling the XFlow API costs only USDC (no gas). But executing the actual swap on X Layer requires OKB for gas — the agent must hold a small amount of OKB on X Layer.
+**Summary:** Calling XFlow costs only USDC — no gas token needed for API calls. The actual swap execution on X Layer requires a small amount of OKB.
 
 ---
 
-## Known Limitations
+## Supported Payment Networks (x402)
 
-- **External service dependencies** — XFlow relies on OKX DEX Aggregator, OpenRouter (Gemini), payai facilitator, and ClawdMint. If any of these are unavailable, the corresponding step will fail. The `/health` endpoint reflects server status only; downstream service health is not currently monitored.
-- **No testnet support** — X Layer does not have a public testnet. All testing is performed on mainnet with small amounts.
-- **recentSwaps window** — The dashboard shows the last 10 swaps from the analytics contract. Historical volume beyond this window uses an on-chain `totalVolume()` if available, otherwise falls back to the visible window sum.
-- **Facilitator proxy** — In some Docker environments where outbound HTTPS from bridge networks is restricted, a local proxy is required to relay facilitator requests. If you encounter `free_tier_exhausted` errors, ensure your PayAI API credentials are set and credits are available at [merchant.payai.network](https://merchant.payai.network).
-- **Single analytics contract** — There is no replay protection at the application layer beyond what the EVM provides. The analytics contract records data but does not gate swap execution.
+| Chain | Network ID | USDC Address | Finality |
+|-------|-----------|------|----------|
+| X Layer | `eip155:196` | `0x74b7f16337b8972027f6196a17a631ac6de26d22` | ~1s |
+| Base | `eip155:8453` | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | ~2s |
+| Polygon | `eip155:137` | `0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359` | ~5s |
+| Avalanche | `eip155:43114` | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` | ~0.8s |
+
+---
+
+## Onchain Contracts (X Layer)
+
+| Contract | Address | Explorer |
+|----------|---------|---------|
+| XFlowAnalytics | `0xf88A47a15fAa310E11c67568ef934141880d473e` | [View on OKX Explorer](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e) |
 
 ---
 
 ## Environment Variables
 
 ```bash
-PRIVATE_KEY=0x...           # Wallet for signing analytics + ClawdMint A2A txs
-OKX_API_KEY=                # OKX Web3 Developer Portal
+PRIVATE_KEY=0x...            # Wallet for analytics TXs + ClawdMint A2A payments
+OKX_API_KEY=                 # OKX Web3 Developer Portal
 OKX_SECRET_KEY=
 OKX_PASSPHRASE=
-OPENROUTER_API_KEY=         # Gemini 2.5 Flash Lite via OpenRouter
+OPENROUTER_API_KEY=          # Gemini 2.5 Flash Lite via OpenRouter
 ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
-PAYEE_ADDRESS=0x...         # x402 payment recipient
+PAYEE_ADDRESS=0x...          # x402 payment recipient (XFlow revenue)
 PAYAI_API_KEY_ID=            # PayAI merchant portal (https://merchant.payai.network)
-PAYAI_API_KEY_SECRET=        # PayAI merchant portal
+PAYAI_API_KEY_SECRET=
 PORT=3010
 ```
 
-> **Security note:** Use a dedicated hot wallet with minimal funds. Never reuse a wallet holding significant assets. For production, use a secrets manager rather than `.env` files.
+---
+
+## Known Limitations
+
+- **External dependencies** — OKX DEX Aggregator, OpenRouter, payai facilitator, and ClawdMint must all be reachable. `/health` reflects server status only.
+- **No testnet** — X Layer has no public testnet. All testing is on mainnet with small amounts.
+- **Session-only metrics** — `avgDecisionMs` and `totalGasSavedUSD` reset on server restart. Onchain metrics (`totalSwaps`, `totalVolume` etc.) are persistent.
+- **Static finality values** — SmartPaymentRouter uses hardcoded finality estimates. Real-time tracking is a roadmap item.
+- **Facilitator proxy** — In Docker environments with restricted outbound HTTPS, a local proxy on port 3011 is required for x402 settlement.
 
 ---
 
 ## Roadmap
 
-- [ ] More supported payment chains (SKALE Base, Abstract)
-- [ ] Volume-based pricing (high-frequency agents get discounts)
-- [ ] Multi-chain aggregated payment (split payment across chains)
-- [ ] Agent SDK package (`npm install xflow-sdk`)
+- [ ] Real-time finality tracking per chain
+- [ ] Additional chains (Abstract, SKALE)
+- [ ] Volume-based pricing (high-frequency agent discounts)
+- [ ] Multi-chain split payments
+- [ ] `npm install @xflow/payment-router` SDK package
+- [ ] Persistent decision latency + gas saved metrics (onchain)
 
 ---
 
 ## Built With
 
-- [x402 Protocol](https://x402.org) — HTTP-native micropayments
-- [OKX DEX Aggregator](https://web3.okx.com) — Best swap routes on X Layer
-- [OKX OnchainOS](https://web3.okx.com/onchain-os) — Onchain OS Skills
-- [ClawdMint](https://clawdmint.com) — A2A agent with x402 payments
-- [payai facilitator](https://facilitator.payai.network) — x402 settlement
-- [X Layer](https://www.okx.com/xlayer) — EVM chain by OKX (eip155:196)
-- [agent 0](https://www.ag0.xyz/)  — Agent identity & x402 payment SDK (ERC-8004)
-- [OpenRouter](https://openrouter.ai/) — LLM gateway (Gemini 2.5 Flash Lite)
-- [viem](https://viem.sh) — EVM interactions
+| Component | Role |
+|-----------|------|
+| [x402 Protocol](https://x402.org) | HTTP-native micropayments |
+| [OKX DEX Aggregator](https://web3.okx.com) | Best swap routes on X Layer |
+| [OKX OnchainOS](https://web3.okx.com/onchain-os) | Onchain OS Skills |
+| [X Layer](https://www.okx.com/xlayer) | EVM execution chain (eip155:196) |
+| [ClawdMint](https://clawdmint.com) | External A2A agent (post-swap analysis) |
+| [agent0 SDK](https://www.ag0.xyz/) | A2A protocol + x402 payments (ERC-8004) |
+| [payai facilitator](https://facilitator.payai.network) | x402 settlement layer |
+| [OpenRouter](https://openrouter.ai/) | LLM gateway (Gemini 2.5 Flash Lite) |
+| [viem](https://viem.sh) | EVM interactions |
 
 ---
 
 ## License
 
 MIT
+
+---
+
+> *XFlow was built for the OKX x402 Hackathon. All swaps executed on X Layer mainnet. All payments settled onchain.*

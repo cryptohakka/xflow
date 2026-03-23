@@ -21,6 +21,7 @@ const SUPPORTED_NETWORKS = [
     chainId: 8453,
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     finalitySeconds: 2.0,
+    coingeckoId: 'ethereum',
   },
   {
     network: 'eip155:137',
@@ -29,6 +30,7 @@ const SUPPORTED_NETWORKS = [
     chainId: 137,
     usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     finalitySeconds: 5.0,
+    coingeckoId: 'polygon-ecosystem-token',
   },
   {
     network: 'eip155:43114',
@@ -37,6 +39,7 @@ const SUPPORTED_NETWORKS = [
     chainId: 43114,
     usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
     finalitySeconds: 0.8,
+    coingeckoId: 'avalanche-2',
   },
   {
     network: 'eip155:196',
@@ -45,8 +48,16 @@ const SUPPORTED_NETWORKS = [
     chainId: 196,
     usdc: '0x74b7f16337b8972027f6196a17a631ac6de26d22',
     finalitySeconds: 1.0,
+    coingeckoId: 'okb',
   },
 ];
+
+const FALLBACK_PRICES: Record<string, number> = {
+  'ethereum':                2000,
+  'polygon-ecosystem-token': 0.10,
+  'avalanche-2':             20,
+  'okb':                     40,
+};
 
 const ERC20_ABI = [{
   name: 'balanceOf',
@@ -109,33 +120,41 @@ export function selectBestNetwork(balances: NetworkBalance[]): NetworkBalance | 
   return sufficient.sort((a, b) => Number(b.balance - a.balance))[0];
 }
 
-async function getGasCostUSD(network: typeof SUPPORTED_NETWORKS[0]): Promise<number> {
+// Fetch all native token prices in a single CoinGecko request to avoid rate limits
+async function fetchAllNativePricesUSD(): Promise<Record<string, number>> {
+  const ids = SUPPORTED_NETWORKS.map(n => n.coingeckoId).join(',');
+  try {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!res.ok) throw new Error(`CoinGecko HTTP ${res.status}`);
+    const data = await res.json() as any;
+
+    const prices: Record<string, number> = {};
+    for (const n of SUPPORTED_NETWORKS) {
+      prices[n.network] = data[n.coingeckoId]?.usd || FALLBACK_PRICES[n.coingeckoId];
+    }
+    return prices;
+  } catch (e: any) {
+    console.warn(`⚠️  CoinGecko price fetch failed (${e.message}), using fallback prices`);
+    const prices: Record<string, number> = {};
+    for (const n of SUPPORTED_NETWORKS) {
+      prices[n.network] = FALLBACK_PRICES[n.coingeckoId];
+    }
+    return prices;
+  }
+}
+
+async function getGasPrice(network: typeof SUPPORTED_NETWORKS[0]): Promise<bigint> {
   try {
     const client = createPublicClient({
       chain: { id: network.chainId, name: network.name, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [network.rpc] } } } as any,
       transport: http(network.rpc),
     });
-    const gasPrice = await client.getGasPrice();
-    const estimatedGas = 100000n;
-    const gasCostNative = gasPrice * estimatedGas;
-
-    const nativeTokenIds: Record<string, string> = {
-      'eip155:8453':  'ethereum',
-      'eip155:137':   'polygon-ecosystem-token',
-      'eip155:43114': 'avalanche-2',
-      'eip155:196':   'okb',
-    };
-    const tokenId = nativeTokenIds[network.network];
-    const priceRes = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${tokenId}&vs_currencies=usd`,
-      { headers: { 'Accept': 'application/json' } }
-    );
-    const priceData = await priceRes.json() as any;
-    const priceUSD = priceData[tokenId]?.usd || 0;
-
-    return Number(gasCostNative) / 1e18 * (priceUSD || 100);
+    return await client.getGasPrice();
   } catch {
-    return 999;
+    return 0n;
   }
 }
 
@@ -150,24 +169,32 @@ export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
 
   console.log('⛽ Estimating gas costs...');
   console.log('   (scoring: gasCost + finality × $0.0001/s)');
-  const allBalancesWithGas = await Promise.all(
-    balances.map(async (b) => {
-      const networkConfig = SUPPORTED_NETWORKS.find(n => n.network === b.network)!;
-      const gasCostUSD = await getGasCostUSD(networkConfig);
-      const finalitySeconds = networkConfig.finalitySeconds;
-      // score = gasCostUSD + finality_seconds * FINALITY_WEIGHT
-      const score = gasCostUSD + finalitySeconds * FINALITY_WEIGHT;
-      console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas · ${finalitySeconds}s finality · score $${score.toFixed(6)}`);
-      return { ...b, gasCostUSD, finalitySeconds, score };
-    })
-  );
+
+  // Single CoinGecko request for all networks
+  const nativePrices = await fetchAllNativePricesUSD();
+
+  // Gas prices fetched in parallel (RPC calls, not CoinGecko)
+  const gasPrices = await Promise.all(SUPPORTED_NETWORKS.map(n => getGasPrice(n)));
+
+  const estimatedGas = 100000n;
+
+  const allBalancesWithGas = balances.map((b, i) => {
+    const networkConfig = SUPPORTED_NETWORKS[i];
+    const gasCostNative = gasPrices[i] * estimatedGas;
+    const priceUSD = nativePrices[networkConfig.network];
+    const gasCostUSD = Number(gasCostNative) / 1e18 * priceUSD;
+    const finalitySeconds = networkConfig.finalitySeconds;
+    const score = gasCostUSD + finalitySeconds * FINALITY_WEIGHT;
+    console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas · ${finalitySeconds}s finality · score $${score.toFixed(6)}`);
+    return { ...b, gasCostUSD, finalitySeconds, score };
+  });
 
   const sufficientWithGas = allBalancesWithGas.filter(b => b.sufficient);
   if (sufficientWithGas.length === 0) {
     throw new Error('Insufficient USDC balance on all supported networks');
   }
 
-  // scoreが最小のネットワークを選択
+  // Select network with lowest score
   const best = sufficientWithGas.sort((a, b) => a.score! - b.score!)[0];
 
   console.log(`💡 Selected: ${best.name} (gas $${best.gasCostUSD!.toFixed(6)} · finality ${best.finalitySeconds}s · score $${best.score!.toFixed(6)})`);

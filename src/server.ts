@@ -4,6 +4,7 @@
  * x402-protected HTTP endpoint for multi-agent swap pipeline
  */
 import 'dotenv/config';
+import fs from 'fs';
 import { explorerLink } from './utils.js';
 import express, { Request, Response } from 'express';
 import { join, dirname } from 'path';
@@ -14,6 +15,7 @@ import { paymentMiddleware, x402ResourceServer } from '@x402/express';
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { orchestrate } from './orchestrator.js';
+import { checkBalances } from './smartPaymentRouter.js';
 
 const app = express();
 app.use(express.json());
@@ -31,15 +33,29 @@ function avgLatencyMs(): number | null {
 }
 
 // ── Gas Saved tracker ─────────────────────────────────────────
-// 毎回「最高ガスチェーン - 実際に選んだチェーン」を積み上げ
+// Accumulates (max gas chain - selected chain) per swap
+const GAS_SAVED_FILE = 'gas_saved.json';
+
 let totalGasSavedUSD = 0;
 let gasSavedTxCount  = 0;
+if (fs.existsSync(GAS_SAVED_FILE)) {
+  try {
+    const saved = JSON.parse(fs.readFileSync(GAS_SAVED_FILE, 'utf-8'));
+    totalGasSavedUSD = saved.totalGasSavedUSD ?? 0;
+    gasSavedTxCount  = saved.gasSavedTxCount  ?? 0;
+    console.log(`💾 Gas saved loaded: $${totalGasSavedUSD.toFixed(6)} (${gasSavedTxCount} txs)`);
+  } catch {
+    console.warn('⚠️  gas_saved.json parse failed, starting fresh');
+  }
+}
+
 function recordGasSaved(allBalances: any[], selectedGasCostUSD: number) {
   if (!allBalances?.length) return;
   const maxGas = Math.max(...allBalances.map((b: any) => b.gasCostUSD || 0));
   const saved  = Math.max(0, maxGas - selectedGasCostUSD);
   totalGasSavedUSD += saved;
   gasSavedTxCount++;
+  fs.writeFileSync(GAS_SAVED_FILE, JSON.stringify({ totalGasSavedUSD, gasSavedTxCount }));
 }
 
 // ── x402 setup ────────────────────────────────────────────────
@@ -101,10 +117,93 @@ const paymentConfig = {
 
 app.use(paymentMiddleware(paymentConfig, x402Server, undefined, undefined, false));
 
+// ── /best-network config ──────────────────────────────────────
+const BEST_NETWORK_CONFIG = [
+  { network: 'eip155:8453',  name: 'Base',      rpc: 'https://mainnet.base.org',                    finalitySeconds: 2.0, coingeckoId: 'ethereum' },
+  { network: 'eip155:137',   name: 'Polygon',   rpc: 'https://polygon-bor-rpc.publicnode.com',      finalitySeconds: 5.0, coingeckoId: 'polygon-ecosystem-token' },
+  { network: 'eip155:43114', name: 'Avalanche', rpc: 'https://api.avax.network/ext/bc/C/rpc',       finalitySeconds: 0.8, coingeckoId: 'avalanche-2' },
+  { network: 'eip155:196',   name: 'X Layer',   rpc: 'https://rpc.xlayer.tech',                     finalitySeconds: 1.0, coingeckoId: 'okb' },
+];
+const FINALITY_WEIGHT = 0.0001;
+const FALLBACK_PRICES: Record<string, number> = {
+  'ethereum': 2000, 'polygon-ecosystem-token': 0.10, 'avalanche-2': 20, 'okb': 40,
+};
+
 // ── Routes ────────────────────────────────────────────────────
 
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
+});
+
+// ── GET /best-network  (no x402) ─────────────────────────────
+// Returns the best network for x402 payment based on USDC balances,
+// gas cost, and finality time. Called by client-agent before /swap.
+app.get('/best-network', async (req: Request, res: Response) => {
+  const { address } = req.query;
+  if (!address || typeof address !== 'string') {
+    return res.status(400).json({ error: 'address query parameter is required' });
+  }
+
+  try {
+    // Single CoinGecko request for all native token prices
+    const ids = BEST_NETWORK_CONFIG.map(n => n.coingeckoId).join(',');
+    const nativePrices: Record<string, number> = {};
+    try {
+      const priceRes = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
+        { headers: { 'Accept': 'application/json' } }
+      );
+      if (!priceRes.ok) throw new Error(`CoinGecko HTTP ${priceRes.status}`);
+      const priceData = await priceRes.json() as any;
+      for (const n of BEST_NETWORK_CONFIG) {
+        nativePrices[n.network] = priceData[n.coingeckoId]?.usd || FALLBACK_PRICES[n.coingeckoId];
+      }
+    } catch (e: any) {
+      console.warn(`⚠️  CoinGecko fetch failed (${e.message}), using fallback prices`);
+      for (const n of BEST_NETWORK_CONFIG) {
+        nativePrices[n.network] = FALLBACK_PRICES[n.coingeckoId];
+      }
+    }
+
+    // Check USDC balances across all networks
+    const balances = await checkBalances(address);
+
+    // Fetch gas prices in parallel (RPC calls)
+    const { createPublicClient, http: viemHttp } = await import('viem');
+    const gasPrices = await Promise.all(
+      BEST_NETWORK_CONFIG.map(async (n) => {
+        try {
+          const client = createPublicClient({
+            chain: { id: 0, name: n.name, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [n.rpc] } } } as any,
+            transport: viemHttp(n.rpc),
+          });
+          return await client.getGasPrice();
+        } catch {
+          return 0n;
+        }
+      })
+    );
+
+    const estimatedGas = 100000n;
+    const allBalances = balances.map((b, i) => {
+      const n = BEST_NETWORK_CONFIG[i];
+      const gasCostNative = gasPrices[i] * estimatedGas;
+      const priceUSD = nativePrices[n.network];
+      const gasCostUSD = Number(gasCostNative) / 1e18 * priceUSD;
+      const score = gasCostUSD + n.finalitySeconds * FINALITY_WEIGHT;
+      return { ...b, gasCostUSD, finalitySeconds: n.finalitySeconds, score };
+    });
+
+    const sufficient = allBalances.filter(b => b.sufficient);
+    if (sufficient.length === 0) {
+      return res.status(400).json({ error: 'Insufficient USDC balance on all supported networks' });
+    }
+
+    const selectedNetwork = sufficient.sort((a, b) => a.score! - b.score!)[0];
+    res.json({ selectedNetwork, allBalances });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/confirm', async (req: Request, res: Response) => {
@@ -117,7 +216,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
 
     if (!txHash) return res.status(400).json({ error: 'txHash required' });
 
-    // Swap完了ログ
+    // Swap completion log
     console.log(`\n${'─'.repeat(55)}`);
     console.log(`✅ Swap complete`);
     console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
@@ -139,7 +238,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
       txHash:         txHash,
     });
 
-    // X402支払いを記録（fire-and-forget）
+    // Record X402 payments (fire-and-forget)
     if (swapX402TxHash) {
       await recordX402PaymentOnchain({
         agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
@@ -178,7 +277,6 @@ app.post('/confirm', async (req: Request, res: Response) => {
         settlements:   analysis.settlements,
         note: 'Powered by ClawdMint via A2A + x402',
       };
-
     } catch (e: any) {
       console.warn('[Confirm] ClawdMint analysis failed:', e.message);
     }
@@ -194,7 +292,7 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
   try {
     const { getDashboardData } = await import('./analyticsAgent.js');
     const data = await getDashboardData();
-    // avgDecisionMs はセッション内メモリから取得（オンチェーン不要）
+    // avgDecisionMs is read from in-memory session data (no on-chain storage needed)
     res.json({ ...data, avgDecisionMs: avgLatencyMs(), totalGasSavedUSD, gasSavedTxCount });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -202,9 +300,9 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
 });
 
 // ── POST /swap  (x402 protected) ──────────────────────────────
-// Quote + risk評価のみ返す。TX dataは含まない。
-// client-agentはこのレスポンスでallowance/approveを判断し、
-// broadcast直前に /tx を叩いてfresh TX dataを取得する。
+// Returns quote + risk assessment only. TX data is not included.
+// The client-agent uses this response to evaluate allowance/approve,
+// then calls /tx right before broadcast to get fresh TX data.
 app.post('/swap', async (req: Request, res: Response) => {
   const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta } = req.body;
 
@@ -255,9 +353,9 @@ app.post('/swap', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /analysisReceived  (x402 不要) ─────────────────────────
-// ClawdMint分析結果受け取り後にclient-agentが呼ぶ
-// /confirmのX402 TXハッシュをここで記録する
+// ── POST /analysisReceived  (no x402) ───────────────────────────
+// Called by client-agent after receiving ClawdMint analysis.
+// Records the /confirm X402 TX hash.
 app.post('/analysisReceived', async (req: Request, res: Response) => {
   try {
     const { agentAddress, confirmX402TxHash, paymentNetwork } = req.body;
@@ -279,8 +377,8 @@ app.post('/analysisReceived', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /tx  (x402 不要 — /swap で支払い済み) ───────────────
-// broadcast直前に呼ぶ。fresh TX dataを返す。
+// ── POST /tx  (no x402 — already paid via /swap) ─────────────
+// Called right before broadcast. Returns fresh TX data.
 app.post('/tx', async (req: Request, res: Response) => {
   const { query, userAddress, fromTokenAddress, toTokenAddress, parsedIntent } = req.body;
 
@@ -329,6 +427,7 @@ const PORT = process.env.PORT || 3010;
 
   app.listen(PORT, () => {
     console.log(`\n🌊 XFlow Server running on http://localhost:${PORT}`);
+    console.log(`   GET  /best-network — free · best chain for x402 payment`);
     console.log(`   POST /swap    — x402 protected (0.001 USDC) · quote + risk only`);
     console.log(`   POST /tx      — free · fresh TX data (call right before broadcast)`);
     console.log(`   POST /confirm — x402 protected (0.001 USDC) · swap confirmation`);

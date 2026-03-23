@@ -86,6 +86,8 @@ Lower score = better route. An agent with USDC on Avalanche pays ~$0.000025 in g
    Avalanche: $0.000025 gas · 0.8s finality → score $0.000105  ✓ selected
 ```
 
+Routing logic lives **server-side** — the client calls `GET /best-network` to get the optimal chain, then handles signing locally. Private keys never leave the client.
+
 **This also benefits the x402 facilitator.** The facilitator is a third-party service that settles x402 payments onchain on behalf of agents — absorbing the gas cost of every settlement. By routing payments to the cheapest chain, SmartPaymentRouter reduces the facilitator's gas burden across the entire ecosystem:
 
 ```
@@ -129,7 +131,8 @@ ClawdMint (external AI · swap confirmation)
 ```
 External Agent / User
         │
-        │  x402 payment ($0.001 USDC · optimal chain selected automatically)
+        │  GET /best-network → optimal chain selected server-side
+        │  x402 payment ($0.001 USDC · signed client-side)
         ▼
 ┌─────────────────────────┐
 │   Smart Payment Router  │  ← score = gasCost + finality × $0.0001/s
@@ -168,7 +171,6 @@ External Agent / User
 ```mermaid
 sequenceDiagram
     participant Agent
-    participant Router as SmartPaymentRouter
     participant XFlow as XFlow Server
     participant OKX as OKX DEX API
     participant Risk as Risk Agent
@@ -176,10 +178,10 @@ sequenceDiagram
     participant Analytics as XFlowAnalytics.sol
     participant ClawdMint
 
-    Agent->>Router: createSmartPaymentFetch()
-    Router-->>Agent: optimal chain selected (lowest score)
+    Agent->>XFlow: GET /best-network?address=0x...
+    XFlow-->>Agent: optimal chain selected (lowest score)
 
-    Agent->>XFlow: POST /swap (x402 $0.001 USDC)
+    Agent->>XFlow: POST /swap (x402 $0.001 USDC · signed client-side)
     XFlow->>OKX: fetch quote
     OKX-->>XFlow: quote + route
     XFlow->>Risk: evaluate risk
@@ -208,7 +210,7 @@ sequenceDiagram
 
 ```
 src/
-├── server.ts               # Express server — /swap, /tx, /confirm, /dashboard
+├── server.ts               # Express server — /best-network, /swap, /tx, /confirm, /dashboard
 ├── smartPaymentRouter.ts   # Chain selection: score = gasCost + finality × $0.0001/s
 ├── orchestrator.ts         # LLM intent parsing (Gemini 2.5 Flash Lite)
 ├── riskAgent.ts            # Risk evaluation — price impact + route quality
@@ -223,8 +225,7 @@ src/
 
 client-agent/
 ├── src/
-│   ├── index.ts            # Autonomous swap agent — full pipeline
-│   └── smartPaymentRouter.ts  # Chain selection (client-side)
+│   └── index.ts            # Autonomous swap agent — full pipeline
 ├── Dockerfile
 ├── docker-compose.yml
 └── .env.example
@@ -300,8 +301,8 @@ SWAP_QUERY=swap 0.01 USDC to USDT0  # Natural language swap instruction
 ```
 
 That's it. The agent will:
-1. Scan USDC balances across 4 chains and select the optimal payment chain
-2. Pay $0.001 USDC to XFlow via x402
+1. Ask XFlow to select the optimal payment chain (`GET /best-network`)
+2. Pay $0.001 USDC to XFlow via x402 (signed locally — private key never leaves client)
 3. Receive a quote + risk assessment
 4. Sign and broadcast the swap TX on X Layer
 5. Pay $0.001 USDC to confirm the swap
@@ -316,10 +317,22 @@ Watch the dashboard at `http://localhost:3010` to see everything recorded onchai
 XFlow is a standard HTTP API with x402 payment protection. Any x402-compatible agent can call it directly.
 
 ```typescript
-import { createSmartPaymentFetch } from './smartPaymentRouter.js';
+import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
+import { ExactEvmScheme } from '@x402/evm';
+import { privateKeyToAccount } from 'viem/accounts';
 
-// SmartPaymentRouter auto-selects optimal payment chain
-const { fetchWithPayment, selectedNetwork } = await createSmartPaymentFetch(PRIVATE_KEY);
+const account = privateKeyToAccount(PRIVATE_KEY);
+
+// Ask XFlow server for the optimal payment chain
+// (routing logic is server-side; private key stays local)
+const { selectedNetwork, allBalances } = await fetch(
+  `http://localhost:3010/best-network?address=${account.address}`
+).then(r => r.json());
+
+// x402 signing stays client-side
+const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
+  schemes: [{ network: selectedNetwork.network, client: new ExactEvmScheme(account) }],
+});
 
 // POST /swap — pays $0.001 USDC automatically, returns quote + risk
 const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
@@ -327,15 +340,44 @@ const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     query: 'swap 0.01 USDC to USDT0',
-    userAddress: '0x...',
+    userAddress: account.address,
   }),
 });
 ```
 
 See [API Reference](#api-reference) for the full integration guide.
 
+---
 
 ## API Reference
+
+### `GET /best-network` — free
+
+Returns the optimal chain for x402 payment based on USDC balances, gas cost, and finality time. Called by client-agent before `/swap`. Routing logic runs server-side; private keys never leave the client.
+
+```
+GET /best-network?address=0x...
+```
+
+```json
+// Response
+{
+  "selectedNetwork": {
+    "network": "eip155:43114",
+    "name": "Avalanche",
+    "balanceFormatted": "0.094",
+    "gasCostUSD": 0.000025,
+    "finalitySeconds": 0.8,
+    "score": 0.000105
+  },
+  "allBalances": [
+    { "name": "Base",      "balanceFormatted": "0.144", "sufficient": true,  "gasCostUSD": 0.001235, "score": 0.001435 },
+    { "name": "Polygon",   "balanceFormatted": "0.200", "sufficient": true,  "gasCostUSD": 0.001222, "score": 0.001722 },
+    { "name": "Avalanche", "balanceFormatted": "0.094", "sufficient": true,  "gasCostUSD": 0.000025, "score": 0.000105 },
+    { "name": "X Layer",   "balanceFormatted": "0.120", "sufficient": true,  "gasCostUSD": 0.000200, "score": 0.000300 }
+  ]
+}
+```
 
 ### `POST /swap` — x402 protected · $0.001 USDC
 
@@ -413,7 +455,7 @@ Records swap onchain and triggers ClawdMint A2A analysis.
 
 ### `GET /dashboard` — free
 
-Real-time analytics from XFlowAnalytics.sol. Includes `avgDecisionMs` and `totalGasSavedUSD` from session memory.
+Real-time analytics from XFlowAnalytics.sol. Includes `avgDecisionMs` (session memory) and `totalGasSavedUSD` (persisted to `gas_saved.json` across restarts).
 
 ### `GET /health` — free
 
@@ -500,7 +542,7 @@ PORT=3010
 
 - **External dependencies** — OKX DEX Aggregator, OpenRouter, payai facilitator, and ClawdMint must all be reachable. `/health` reflects server status only.
 - **No testnet** — X Layer has no public testnet. All testing is on mainnet with small amounts.
-- **Session-only metrics** — `avgDecisionMs` and `totalGasSavedUSD` reset on server restart. Onchain metrics (`totalSwaps`, `totalVolume` etc.) are persistent.
+- **Session-only latency metric** — `avgDecisionMs` resets on server restart. `totalGasSavedUSD` is persisted to `gas_saved.json` and survives restarts. Onchain metrics (`totalSwaps`, `totalVolume` etc.) are always persistent.
 - **Static finality values** — SmartPaymentRouter uses hardcoded finality estimates. Real-time tracking is a roadmap item.
 - **Facilitator proxy** — In Docker environments with restricted outbound HTTPS, a local proxy on port 3011 is required for x402 settlement.
 
@@ -513,7 +555,7 @@ PORT=3010
 - [ ] Volume-based pricing (high-frequency agent discounts)
 - [ ] Multi-chain split payments
 - [ ] `npm install @xflow/payment-router` SDK package
-- [ ] Persistent decision latency + gas saved metrics (onchain)
+- [ ] Persistent decision latency metric (onchain)
 
 ---
 
