@@ -611,6 +611,9 @@ PORT=3010
 
 ## Roadmap
 
+- [ ] A2A agent registry — register XFlow as a discoverable A2A-compatible agent (ERC-8004)
+- [ ] Composable agent pipeline — user-selectable service tiers that dynamically assemble A2A agent chains (e.g. swap / swap+analysis / swap+yield+analysis)
+- [ ] Per-tier pricing — service bundles priced per agent hop, automatically settled via x402
 - [ ] Real-time finality tracking per chain
 - [ ] Additional chains (Abstract, SKALE)
 - [ ] Volume-based pricing (high-frequency agent discounts)
