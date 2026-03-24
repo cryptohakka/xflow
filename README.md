@@ -132,6 +132,8 @@ Lower score = better route. An agent with USDC on Avalanche pays ~$0.000025 in g
    Base:      $0.001315 gas · 2s finality   → score $0.001515
    X Layer:   $0.000089 gas · 1s finality   → score $0.000189
    Avalanche: $0.000025 gas · 0.8s finality → score $0.000105  ✓ selected
+
+![SmartPaymentRouter](./assets/smartpaymentrouter.png)
 ```
 
 Routing logic lives **server-side** — the client calls `GET /best-network` to get the optimal chain, then handles signing locally. Private keys never leave the client.
