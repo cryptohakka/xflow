@@ -602,7 +602,7 @@ PORT=3010
 ## Known Limitations
 
 - **External dependencies** — OKX DEX Aggregator, OpenRouter, payai facilitator, and the external A2A agent must all be reachable. `/health` reflects server status only.
-- **No testnet** — X Layer has no public testnet. All testing is on mainnet with small amounts.
+- **Mainnet only** — XFlow is deployed and tested on X Layer mainnet with small amounts. Testnet support is a future roadmap item.
 - **Session-only latency metric** — `avgDecisionMs` resets on server restart. `totalGasSavedUSD` is persisted to `gas_saved.json` and survives restarts. Onchain metrics (`totalSwaps`, `totalVolume` etc.) are always persistent.
 - **Static finality values** — SmartPaymentRouter uses hardcoded finality estimates. Real-time tracking is a roadmap item.
 - **Facilitator proxy** — In Docker environments with restricted outbound HTTPS, a local proxy on port 3011 is required for x402 settlement.
