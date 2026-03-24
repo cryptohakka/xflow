@@ -44,7 +44,7 @@ const TOKENS: Record<string, string> = {
   USDT0: '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
-// OKX DEX Router on X Layer（フォールバック用）
+// OKX DEX Router on X Layer (fallback)
 const OKX_ROUTER_XLAYER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000';
 
 export interface SwapRequest {
@@ -77,8 +77,8 @@ export async function getSwapQuote(req: SwapRequest) {
 
   const q = json.data[0];
 
-  // spender: dexRouterList から抽出を試みる。なければフォールバック
-  // OKX quote API は router / routerAddress / dexProtocol.router などいくつかのパスで返す
+  // spender: try to extract from dexRouterList, fallback if not found
+  // OKX quote API returns router address via various paths (router / routerAddress / dexProtocol.router)
   const spender: string = OKX_ROUTER_XLAYER;
 
   const addrToSymbol: Record<string, string> = {
@@ -103,7 +103,7 @@ export async function getSwapQuote(req: SwapRequest) {
     toTokenUnitPrice: q.toToken?.tokenUnitPrice || '0',
     fromTokenAddress: fromAddr,
     toTokenAddress: toAddr,
-    spender,  // approve時のspenderアドレス
+    spender,  // spender address for approve
   };
 }
 

@@ -4,3 +4,6 @@ node_modules/
 dist/
 .DS_Store
 client-agent/.env
+cache/
+out/
+gas_saved.json

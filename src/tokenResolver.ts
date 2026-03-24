@@ -7,7 +7,7 @@ import { readFileSync } from 'fs';
 
 const CHAIN_INDEX = '196';
 
-// ハードコードの主要トークン（常に利用可能）
+// Hardcoded major tokens (always available)
 const KNOWN_TOKENS: Record<string, string> = {
   'USDC':   '0x74b7f16337b8972027f6196a17a631ac6de26d22',
   'WOKB':   '0xe538905cf8410324e03a5a23c1c177a474d59b2b',
@@ -22,12 +22,12 @@ const KNOWN_TOKENS: Record<string, string> = {
   'USDT0':  '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
-// アドレス→シンボルの逆引きマップ
+// Reverse map: address → symbol
 const ADDRESS_TO_SYMBOL: Record<string, string> = Object.fromEntries(
   Object.entries(KNOWN_TOKENS).map(([sym, addr]) => [addr.toLowerCase(), sym])
 );
 
-// APIキャッシュ（バックグラウンドで更新）
+// API cache (updated in background)
 let apiCache: Record<string, string> = {};
 let cacheLoaded = false;
 
@@ -43,7 +43,7 @@ function loadEnv(): Record<string, string> {
   } catch { return {}; }
 }
 
-// バックグラウンドでAPIからトークンリストを取得
+// Fetch token list from API in background
 async function refreshTokenCache() {
   try {
     const env = loadEnv();
@@ -72,11 +72,11 @@ async function refreshTokenCache() {
     }
   } catch (e: any) {
     console.warn('[TokenResolver] API fetch failed (using known tokens only):', e.message);
-    cacheLoaded = true; // エラーでも続行
+    cacheLoaded = true;
   }
 }
 
-// 起動時にバックグラウンドでキャッシュ更新
+// Refresh cache in background on startup
 refreshTokenCache();
 
 /**
@@ -88,7 +88,7 @@ export async function resolveToken(symbolOrAddress: string): Promise<{
   source: 'address' | 'known' | 'api' | 'not_found';
   symbol?: string;
 }> {
-  // アドレス直接指定
+  // Direct address input
   if (symbolOrAddress.startsWith('0x') && symbolOrAddress.length === 42) {
     const symbol = ADDRESS_TO_SYMBOL[symbolOrAddress.toLowerCase()] || 
                    Object.entries(apiCache).find(([,v]) => v.toLowerCase() === symbolOrAddress.toLowerCase())?.[0];
@@ -97,18 +97,18 @@ export async function resolveToken(symbolOrAddress: string): Promise<{
 
   const upper = symbolOrAddress.toUpperCase();
 
-  // KNOWN_TOKENSから即座に返す
+  // Return immediately from KNOWN_TOKENS
   if (KNOWN_TOKENS[upper]) {
     return { address: KNOWN_TOKENS[upper], source: 'known', symbol: upper };
   }
 
-  // APIキャッシュが読み込まれていれば使う
+  // Use API cache if loaded
   if (cacheLoaded && apiCache[upper]) {
     return { address: apiCache[upper], source: 'api', symbol: upper };
   }
 
-  // キャッシュ未ロードでも待たずにnot_foundを返す
-  // （KNOWN_TOKENSにない場合はアドレス直接指定を要求）
+  // Return not_found without waiting if cache not yet loaded
+  // (tokens not in KNOWN_TOKENS require direct address input)
   return { address: null, source: 'not_found' };
 }
 

@@ -345,7 +345,7 @@ function render(data){
   const networkBreakdown=data.networkBreakdown||{};
   const networkMax=Math.max(...Object.values(networkBreakdown).map(Number),1);
 
-  // GAS SAVED: サーバーが毎swap「max(allBalances.gasCostUSD) - selected」を積み上げた値
+  // GAS SAVED: cumulative (max(allBalances.gasCostUSD) - selected) per swap, accumulated server-side
   const gasSaved=parseFloat(data.totalGasSavedUSD)||0;
   const gasSavedTxCount=parseInt(data.gasSavedTxCount)||0;
   const gasSavedStr='$'+gasSaved.toFixed(6);
@@ -432,31 +432,31 @@ function render(data){
             <span style="font-family:'Share Tech Mono',monospace;font-size:0.58rem;color:var(--dim)">WHO PAYS · HOW MUCH · WHERE</span>
           </div>
           <div class="kpi-grid-2">
-            <!-- 左上 -->
+
             <div class="stat-card payment-card">
               <div class="stat-label">A2A CALLS</div>
               <div class="stat-value" style="color:var(--orange)">${totalA2A}</div>
               <div class="stat-sub">ClawdMint · all-time</div>
             </div>
-            <!-- 右上 -->
+
             <div class="stat-card payment-card">
               <div class="stat-label">TOTAL FEES EARNED</div>
               <div class="stat-value" style="color:var(--gold)">$${totalFees.toFixed(4)}</div>
               <div class="stat-sub">XFlow revenue · all-time</div>
             </div>
-            <!-- 左下 -->
+
             <div class="stat-card payment-card">
               <div class="stat-label">AGENT DECISION LATENCY</div>
               <div class="stat-value" style="color:var(--green);font-size:1.8rem">${avgDecisionMs}</div>
               <div class="stat-sub">Avg. AI route decision · session</div>
             </div>
-            <!-- 右下 -->
+
             <div class="stat-card payment-card">
               <div class="stat-label">GAS SAVED BY SMART ROUTER</div>
               <div class="stat-value" style="color:${gasSaved>0?'var(--green)':'var(--dim)'};font-size:1.8rem">${gasSavedStr}</div>
               <div class="stat-sub">vs highest-cost chain · ${gasSavedTxCount} swaps</div>
             </div>
-            <!-- フル幅 -->
+
             <div class="stat-card payment-card" style="grid-column:1/-1">
               <div class="stat-label">x402 PAYMENT CHAINS</div>
               <div class="inline-bars">${netBars}</div>

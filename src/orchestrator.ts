@@ -18,7 +18,7 @@ export interface ParsedIntent {
 }
 
 /**
- * LLMでクエリを構造化
+ * Parse query with LLM
  */
 async function parseIntent(query: string): Promise<ParsedIntent> {
   try {
@@ -74,8 +74,8 @@ export interface OrchestratorOptions {
   userAddress?: string;
   fromTokenAddress?: string;
   toTokenAddress?: string;
-  quoteOnly?: boolean;  // true = quote+risk のみ。TX dataを生成しない（/swap用）
-                        // false = TX dataまで生成（/tx用）
+  quoteOnly?: boolean;  // true = quote+risk only, no TX generation (used by /swap)
+
 }
 
 export async function orchestrate(query: string, options: OrchestratorOptions) {
@@ -87,7 +87,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     quoteOnly = false,
   } = options;
 
-  // Step 1: LLMでintent解析
+  // Step 1: Parse intent with LLM
   console.log(`🧠 Orchestrator parsing intent...`);
   const intent = options.parsedIntent || await parseIntent(query);
   console.log(`   Parsed:`, JSON.stringify(intent));
@@ -96,7 +96,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     return { intent, network: preferredNetwork, transaction: '', data: { status: 'unrecognized intent' } };
   }
 
-  // Step 2: トークンアドレス解決
+  // Step 2: Resolve token addresses
   const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC');
   const toResolved = await resolveToken(toTokenAddress || intent.toToken || 'WOKB');
   const fromSymbol = fromTokenAddress?.length
@@ -126,7 +126,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
 
   console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}(${fromResolved.address?.slice(0,8)}), ${toSymbol}=${toResolved.source}(${toResolved.address?.slice(0,8)})`);
 
-  // Step 3: quoteを取得してrisk評価
+  // Step 3: Get quote for risk evaluation
   console.log(`📊 Getting quote for risk evaluation... ${fromSymbol} → ${toSymbol}`);
   const quote = await getSwapQuote({
     fromToken: fromSymbol,
@@ -172,9 +172,9 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  // quoteOnly=true の場合はTX dataを生成せずに返す（/swap エンドポイント用）
-  // client-agentはこのレスポンスでallowance/approveを判断し、
-  // approve完了後に /tx を叩いてfresh TX dataを取得する
+  // If quoteOnly=true, skip TX generation and return (used by /swap endpoint)
+  // client-agent uses this response to check allowance/approve,
+  // then calls /tx after approve to get fresh TX data
   if (quoteOnly) {
     console.log(`✅ Quote+Risk approved · skipping TX generation (quoteOnly mode)`);
     return {
@@ -185,9 +185,9 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
         status: 'approved',
         risk,
         quote,
-        result: null,  // TX dataなし
+        result: null,
         confirmEndpoint: '/confirm',
-        txEndpoint: '/tx',  // client-agentへのヒント
+        txEndpoint: '/tx',  // hint for client-agent
       },
     };
   }
@@ -195,7 +195,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   // Rate limit: 1 req/sec
   await new Promise(r => setTimeout(r, 1100));
 
-  // Step 5: DEX Agent（TX data生成）
+  // Step 5: DEX Agent (generate TX data)
   const result = await handleDexQuery(query, userAddress, quote);
 
   return {
