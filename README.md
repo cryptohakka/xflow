@@ -97,7 +97,7 @@ Fees are collected directly to `PAYEE_ADDRESS` with no intermediary. Future pric
 
 ![XFlow Dashboard](./assets/dashboard.png)
 
-*All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e)*
+*All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b)*
 
 ---
 
@@ -139,14 +139,14 @@ Routing logic lives **server-side** — the client calls `GET /best-network` to 
 **This also benefits the x402 facilitator.** The facilitator is a third-party service that settles x402 payments onchain on behalf of agents — absorbing the gas cost of every settlement. By routing payments to the cheapest chain, SmartPaymentRouter reduces the facilitator's gas burden across the entire ecosystem:
 
 ```
-Without SmartRouting:
-  10,000 agent payments/day × $0.005 avg settlement gas = $50/day facilitator cost
+Without SmartRouting (highest-cost chain):
+  10,000 payments/day × $0.001235 avg = $12.35/day facilitator cost
 
-With SmartRouting:
-  10,000 agent payments/day × $0.002 avg settlement gas = $20/day facilitator cost
+With SmartRouting (lowest-cost chain selected):
+  10,000 payments/day × $0.000025 avg = $0.25/day facilitator cost
 
-  → 60% cost reduction for the facilitator
-  → More sustainable infrastructure for the agent economy at scale
+  → 98% cost reduction for the facilitator
+  → Based on gas costs observed across supported chains during development
 ```
 
 SmartPaymentRouter is a systemic improvement — not just a per-agent optimization.
@@ -334,7 +334,7 @@ OKX_API_KEY=                 # OKX Web3 Developer Portal
 OKX_SECRET_KEY=
 OKX_PASSPHRASE=
 OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
-ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
+ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
 PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
 PAYAI_API_KEY_ID=            # PayAI merchant portal
 PAYAI_API_KEY_SECRET=
@@ -578,7 +578,7 @@ XFlow has two distinct gas surfaces:
 
 | Contract | Address | Explorer |
 |----------|---------|---------|
-| XFlowAnalytics | `0xf88A47a15fAa310E11c67568ef934141880d473e` | [View on OKX Explorer](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e) |
+| XFlowAnalytics | `0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b` | [View on OKX Explorer](https://www.okx.com/web3/explorer/xlayer/address/0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b) |
 
 ---
 
@@ -590,7 +590,7 @@ OKX_API_KEY=                 # OKX Web3 Developer Portal
 OKX_SECRET_KEY=
 OKX_PASSPHRASE=
 OPENROUTER_API_KEY=          # Gemini 2.5 Flash Lite via OpenRouter
-ANALYTICS_CONTRACT=0xf88A47a15fAa310E11c67568ef934141880d473e
+ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
 PAYEE_ADDRESS=0x...          # x402 payment recipient (XFlow revenue)
 PAYAI_API_KEY_ID=            # PayAI merchant portal (https://merchant.payai.network)
 PAYAI_API_KEY_SECRET=
