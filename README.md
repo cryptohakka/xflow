@@ -4,7 +4,7 @@
 
 XFlow is a production-deployed multi-agent system where AI agents autonomously execute DeFi swaps on X Layer, pay for services using x402 micropayments ($0.001 USDC/call), and consult external AI agents — all without human intervention. Every payment, swap, and agent-to-agent call is recorded onchain.
 
-**[🎬 Demo Video](#)** · **[📊 Live Dashboard](#)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)**
+**[🎬 Demo Video](https://x.com/xflow_lab/status/2036330252180279791)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)**
 
 ---
 
@@ -36,18 +36,9 @@ No API keys. No subscriptions. No humans.
 
 ---
 
-## Live Stats (Onchain · X Layer)
+## Live Dashboard
 
-| Metric | Value |
-|--------|-------|
-| Unique AI Agents | 3 |
-| Total Swaps Executed | 23 |
-| Total x402 Payments | 61 |
-| A2A Calls (Agent→Agent) | 22 |
-| Total Fees Earned | $0.061 |
-| Avg. Decision Latency | 796ms |
-| Execution Success Rate | 100% |
-| Avg. Slippage | 0.065% |
+![XFlow Dashboard](./assets/dashboard.png)
 
 *All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xf88A47a15fAa310E11c67568ef934141880d473e)*
 

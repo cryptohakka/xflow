@@ -191,7 +191,7 @@ app.get('/best-network', async (req: Request, res: Response) => {
       const priceUSD = nativePrices[n.network];
       const gasCostUSD = Number(gasCostNative) / 1e18 * priceUSD;
       const score = gasCostUSD + n.finalitySeconds * FINALITY_WEIGHT;
-      return { ...b, gasCostUSD, finalitySeconds: n.finalitySeconds, score };
+      return { ...b, balance: b.balance.toString(), gasCostUSD, finalitySeconds: n.finalitySeconds, score };
     });
 
     const sufficient = allBalances.filter(b => b.sufficient);
