@@ -2,7 +2,7 @@
  * XFlow Orchestrator
  * LLM-powered intent parsing + agent routing
  */
-import { handleDexQuery, getSwapQuote } from './dexAgent.js';
+import { handleDexQuery, getSwapQuote, selectBestRoute } from './dexAgent.js';
 import { resolveToken, getAvailableTokens } from './tokenResolver.js';
 import { recordFailedSwapOnchain } from './analyticsAgent.js';
 import { handleRiskCheck } from './riskAgent.js';
@@ -17,9 +17,6 @@ export interface ParsedIntent {
   userAddress?: string;
 }
 
-/**
- * Parse query with LLM
- */
 async function parseIntent(query: string): Promise<ParsedIntent> {
   try {
     const tokens = await getAvailableTokens();
@@ -54,7 +51,6 @@ Supported tokens on X Layer: ${tokenList}`,
     const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
     return JSON.parse(cleaned);
   } catch {
-    // fallback to keyword matching
     const isSwap = /swap|buy|sell|trade/i.test(query);
     const amountMatch = query.match(/[\d.]+/);
     const swapMatch = query.match(/swap\s+[\d.]+\s+(\w+)\s+to\s+(\w+)/i);
@@ -74,8 +70,7 @@ export interface OrchestratorOptions {
   userAddress?: string;
   fromTokenAddress?: string;
   toTokenAddress?: string;
-  quoteOnly?: boolean;  // true = quote+risk only, no TX generation (used by /swap)
-
+  quoteOnly?: boolean;
 }
 
 export async function orchestrate(query: string, options: OrchestratorOptions) {
@@ -87,7 +82,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     quoteOnly = false,
   } = options;
 
-  // Step 1: Parse intent with LLM
+  // Step 1: Parse intent
   console.log(`🧠 Orchestrator parsing intent...`);
   const intent = options.parsedIntent || await parseIntent(query);
   console.log(`   Parsed:`, JSON.stringify(intent));
@@ -98,20 +93,16 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
 
   // Step 2: Resolve token addresses
   const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC');
-  const toResolved = await resolveToken(toTokenAddress || intent.toToken || 'WOKB');
-  const fromSymbol = fromTokenAddress?.length
-    ? (fromResolved.symbol || 'TOKEN')
-    : (intent.fromToken || 'USDC');
-  const toSymbol = toTokenAddress?.length
-    ? (toResolved.symbol || 'TOKEN')
-    : (intent.toToken || 'WOKB');
+  const toResolved   = await resolveToken(toTokenAddress   || intent.toToken   || 'WOKB');
+  const fromSymbol = fromTokenAddress?.length ? (fromResolved.symbol || 'TOKEN') : (intent.fromToken || 'USDC');
+  const toSymbol   = toTokenAddress?.length   ? (toResolved.symbol   || 'TOKEN') : (intent.toToken   || 'WOKB');
 
   console.log(`🔍 Tokens: ${fromSymbol}(${fromResolved.address?.slice(0,8)}...) → ${toSymbol}(${toResolved.address?.slice(0,8)}...)`);
 
   if (!fromResolved.address || !toResolved.address) {
     const missing = [];
     if (!fromResolved.address) missing.push(fromSymbol);
-    if (!toResolved.address) missing.push(toSymbol);
+    if (!toResolved.address)   missing.push(toSymbol);
     const available = await getAvailableTokens();
     return {
       intent, network: preferredNetwork, transaction: '',
@@ -120,34 +111,55 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
         message: `Token(s) not found on X Layer: ${missing.join(', ')}`,
         suggestion: 'Please provide tokenContractAddress or use availableTokens',
         availableTokens: available,
-      }
+      },
     };
   }
 
   console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}(${fromResolved.address?.slice(0,8)}), ${toSymbol}=${toResolved.source}(${toResolved.address?.slice(0,8)})`);
 
-  // Step 3: Get quote for risk evaluation
-  console.log(`📊 Getting quote for risk evaluation... ${fromSymbol} → ${toSymbol}`);
-  const quote = await getSwapQuote({
-    fromToken: fromSymbol,
-    toToken: toSymbol,
-    amount: intent.amount || '1.0',
-    userAddress: userAddress || '0x0000000000000000000000000000000000000001',
-    fromTokenAddress: fromResolved.address || undefined,
-    toTokenAddress: toResolved.address || undefined,
-    fromTokenSymbol: fromResolved.symbol || fromSymbol,
-  });
+  // Step 3: Quote + route decision
+  console.log(`📊 Getting quote + route decision... ${fromSymbol} → ${toSymbol}`);
+
+  let quote: any;
+  let routeDecision: any = null;
+
+  try {
+    const { quote: bestQuote, decision } = await selectBestRoute({
+      fromToken: fromSymbol,
+      toToken:   toSymbol,
+      amount:    intent.amount || '1.0',
+      userAddress: userAddress || '0x0000000000000000000000000000000000000001',
+      fromTokenAddress: fromResolved.address || undefined,
+      toTokenAddress:   toResolved.address   || undefined,
+      fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
+      chainId: 196,
+    });
+    quote = bestQuote;
+    routeDecision = decision;
+    console.log(`🏆 Route: ${decision.selected} · liq $${(decision.liquidityUSD || 0).toFixed(0)} · ${decision.reason}`);
+  } catch (e: any) {
+    console.warn(`⚠️  selectBestRoute failed (${e.message}), falling back to OKX quote`);
+    quote = await getSwapQuote({
+      fromToken: fromSymbol,
+      toToken:   toSymbol,
+      amount:    intent.amount || '1.0',
+      userAddress: userAddress || '0x0000000000000000000000000000000000000001',
+      fromTokenAddress: fromResolved.address || undefined,
+      toTokenAddress:   toResolved.address   || undefined,
+      fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
+    });
+  }
 
   // Step 4: Risk Agent
   const risk = await handleRiskCheck({
-    fromToken: quote.fromToken,
-    toToken: quote.toToken,
-    amount: quote.fromAmount,
-    priceImpact: quote.priceImpact,
-    estimateGasFee: quote.estimateGasFee,
-    route: quote.route,
-    isHoneyPot: (quote as any).isHoneyPot,
-    taxRate: (quote as any).taxRate,
+    fromToken:        quote.fromToken,
+    toToken:          quote.toToken,
+    amount:           quote.fromAmount,
+    priceImpact:      quote.priceImpact,
+    estimateGasFee:   quote.estimateGasFee,
+    route:            quote.route,
+    isHoneyPot:       (quote as any).isHoneyPot,
+    taxRate:          (quote as any).taxRate,
     toTokenUnitPrice: (quote as any).toTokenUnitPrice,
   });
 
@@ -155,10 +167,10 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     try {
       await recordFailedSwapOnchain({
         agentAddress: userAddress || '0x0000000000000000000000000000000000000000',
-        fromToken: quote.fromToken,
-        toToken: quote.toToken,
-        fromAmount: quote.fromAmount,
-        reason: 'risk_rejected',
+        fromToken:    quote.fromToken,
+        toToken:      quote.toToken,
+        fromAmount:   quote.fromAmount,
+        reason:       'risk_rejected',
         paymentNetwork: preferredNetwork,
       });
     } catch (e: any) {
@@ -168,13 +180,11 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
       intent,
       network: preferredNetwork,
       transaction: '',
-      data: { status: 'rejected', risk, quote },
+      data: { status: 'rejected', risk, quote, routeDecision },
     };
   }
 
-  // If quoteOnly=true, skip TX generation and return (used by /swap endpoint)
-  // client-agent uses this response to check allowance/approve,
-  // then calls /tx after approve to get fresh TX data
+  // quoteOnly: skip TX generation
   if (quoteOnly) {
     console.log(`✅ Quote+Risk approved · skipping TX generation (quoteOnly mode)`);
     return {
@@ -185,9 +195,10 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
         status: 'approved',
         risk,
         quote,
+        routeDecision,
         result: null,
         confirmEndpoint: '/confirm',
-        txEndpoint: '/tx',  // hint for client-agent
+        txEndpoint: '/tx',
       },
     };
   }
@@ -203,7 +214,11 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     network: preferredNetwork,
     transaction: '',
     data: {
-      status: 'approved', risk, quote, result,
+      status: 'approved',
+      risk,
+      quote,
+      routeDecision,
+      result,
       confirmEndpoint: '/confirm',
     },
   };

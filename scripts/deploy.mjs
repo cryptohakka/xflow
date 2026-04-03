@@ -43,7 +43,7 @@ const result = spawnSync('npx', ['solc', '--standard-json'], {
 });
 
 const jsonLine = result.stdout.split("\n").find(l => l.trim().startsWith("{"));
-const output = JSON.parse(jsonLine);
+const output = JSON.parse(result.stdout);
 
 if (output.errors?.some(e => e.severity === 'error')) {
   console.error(output.errors.filter(e => e.severity === 'error').map(e => e.message).join('\n'));

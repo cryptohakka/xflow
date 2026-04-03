@@ -2,6 +2,11 @@
  * XFlow DEX Agent
  * Returns swap TX data for X Layer via OKX DEX Aggregator
  * Actual execution is done by the caller (agent or user)
+ *
+ * Phase 2 additions:
+ * - Uniswap V4 pool liquidity check
+ * - Multi-factor scoring: OKX vs Uniswap route selection
+ * - Decision log output for dashboard
  */
 import { createHmac } from 'crypto';
 import { readFileSync } from 'fs';
@@ -44,8 +49,27 @@ const TOKENS: Record<string, string> = {
   USDT0: '0x779ded0c9e1022225f8e0630b35a9b54be713736',
 };
 
-// OKX DEX Router on X Layer (fallback)
 const OKX_ROUTER_XLAYER = '0x8b773d83bc66be128c60e07e17c8901f7a64f000';
+
+// ─────────────────────────────────────────────────────────────
+// Phase 2: Uniswap config per chain
+// ─────────────────────────────────────────────────────────────
+
+// Uniswap V3 subgraph endpoints (V4 subgraph not yet widely available)
+const UNISWAP_SUBGRAPHS: Record<number, string> = {
+  8453:  'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-base',
+  137:   'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-polygon',
+  43114: 'https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3-avalanche',
+};
+
+// Uniswap Trading API chain IDs
+const UNISWAP_SUPPORTED_CHAINS: Record<number, boolean> = {
+  8453: true,
+  137:  true,
+  43114: true,
+};
+
+// ─────────────────────────────────────────────────────────────
 
 export interface SwapRequest {
   fromToken: string;
@@ -56,7 +80,194 @@ export interface SwapRequest {
   fromTokenAddress?: string;
   toTokenAddress?: string;
   fromTokenSymbol?: string;
+  chainId?: number; // Phase 2: which chain to route on
 }
+
+// ─────────────────────────────────────────────────────────────
+// Phase 2: Route scoring types
+// ─────────────────────────────────────────────────────────────
+
+export interface RouteScore {
+  route: 'OKX' | 'Uniswap';
+  toAmount: number;
+  priceScore: number;      // 0–1, normalized
+  liquidityScore: number;  // 0–1
+  gasScore: number;        // 0–1
+  reliabilityScore: number;// 0–1
+  totalScore: number;      // weighted composite
+  reason: string;
+}
+
+export interface RouteDecision {
+  selected: 'OKX' | 'Uniswap';
+  okx: RouteScore | null;
+  uniswap: RouteScore | null;
+  reason: string;
+  liquidityUSD?: number;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Uniswap pool liquidity check (V3 subgraph)
+// ─────────────────────────────────────────────────────────────
+
+async function getUniswapPoolLiquidity(
+  chainId: number,
+  token0: string,
+  token1: string,
+): Promise<number> {
+  const subgraph = UNISWAP_SUBGRAPHS[chainId];
+  if (!subgraph) return 0;
+
+  const query = `{
+    pools(
+      where: {
+        token0_in: ["${token0.toLowerCase()}", "${token1.toLowerCase()}"],
+        token1_in: ["${token0.toLowerCase()}", "${token1.toLowerCase()}"]
+      }
+      orderBy: totalValueLockedUSD
+      orderDirection: desc
+      first: 1
+    ) {
+      totalValueLockedUSD
+      feeTier
+    }
+  }`;
+
+  try {
+    const res = await fetch(subgraph, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json() as any;
+    const tvl = parseFloat(data?.data?.pools?.[0]?.totalValueLockedUSD || '0');
+    return tvl;
+  } catch {
+    return 0;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Uniswap Trading API quote
+// ─────────────────────────────────────────────────────────────
+
+async function getUniswapQuote(
+  chainId: number,
+  tokenIn: string,
+  tokenOut: string,
+  amountIn: string, // raw units
+): Promise<{ toAmount: number; gasUSD: number } | null> {
+  const apiKey = getEnv('UNISWAP_API_KEY');
+  if (!apiKey || !UNISWAP_SUPPORTED_CHAINS[chainId]) return null;
+
+  try {
+    const res = await fetch('https://trade-api.gateway.uniswap.org/v1/quote', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        type: 'EXACT_INPUT',
+        tokenInChainId: chainId,
+        tokenOutChainId: chainId,
+        tokenIn,
+        tokenOut,
+        amount: amountIn,
+        swapper: '0x0000000000000000000000000000000000000001',
+        slippageTolerance: '0.5',
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json() as any;
+    const toAmount = parseInt(data?.quote?.output?.amount || '0') / 1e6;
+    const gasUSD   = parseFloat(data?.quote?.gasFeeUSD || '0');
+    return { toAmount, gasUSD };
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Multi-factor route scoring
+// weights: price 50% / liquidity 30% / gas 15% / reliability 5%
+// ─────────────────────────────────────────────────────────────
+
+function scoreRoutes(
+  okxAmount: number,
+  uniswapAmount: number | null,
+  liquidityUSD: number,
+  okxGasUSD: number,
+  uniswapGasUSD: number,
+): { okx: RouteScore; uniswap: RouteScore | null } {
+  const W = { price: 0.50, liquidity: 0.30, gas: 0.15, reliability: 0.05 };
+
+  // Liquidity score: sigmoid-like, $100k TVL = 0.5, $1M = ~0.9
+  const liquidityScore = Math.min(1, liquidityUSD / 1_000_000);
+
+  // Price scores: normalize relative to each other
+  const best = Math.max(okxAmount, uniswapAmount ?? 0);
+  const okxPriceScore      = best > 0 ? okxAmount / best : 0;
+  const uniswapPriceScore  = uniswapAmount && best > 0 ? uniswapAmount / best : 0;
+
+  // Gas scores: lower gas = higher score (invert, normalize to 0–1)
+  const maxGas = Math.max(okxGasUSD, uniswapGasUSD, 0.001);
+  const okxGasScore      = 1 - okxGasUSD / maxGas;
+  const uniswapGasScore  = uniswapGasUSD ? 1 - uniswapGasUSD / maxGas : 0;
+
+  // Reliability: OKX on X Layer proven; Uniswap gets liquidity-based score
+  const okxReliability      = 0.9;
+  const uniswapReliability  = liquidityUSD > 100_000 ? 0.85 : 0.5;
+
+  const okxTotal = (
+    okxPriceScore     * W.price +
+    liquidityScore    * W.liquidity +  // same pool affects both
+    okxGasScore       * W.gas +
+    okxReliability    * W.reliability
+  );
+
+  const okxScore: RouteScore = {
+    route: 'OKX',
+    toAmount: okxAmount,
+    priceScore: okxPriceScore,
+    liquidityScore,
+    gasScore: okxGasScore,
+    reliabilityScore: okxReliability,
+    totalScore: okxTotal,
+    reason: `OKX DEX Aggregator on X Layer · price ${(okxPriceScore * 100).toFixed(1)}% · liq $${liquidityUSD.toFixed(0)} · gas $${okxGasUSD.toFixed(4)}`,
+  };
+
+  if (uniswapAmount === null) {
+    return { okx: okxScore, uniswap: null };
+  }
+
+  const uniswapTotal = (
+    uniswapPriceScore   * W.price +
+    liquidityScore      * W.liquidity +
+    uniswapGasScore     * W.gas +
+    uniswapReliability  * W.reliability
+  );
+
+  const uniswapScore: RouteScore = {
+    route: 'Uniswap',
+    toAmount: uniswapAmount,
+    priceScore: uniswapPriceScore,
+    liquidityScore,
+    gasScore: uniswapGasScore,
+    reliabilityScore: uniswapReliability,
+    totalScore: uniswapTotal,
+    reason: `Uniswap V3 · price ${(uniswapPriceScore * 100).toFixed(1)}% · liq $${liquidityUSD.toFixed(0)} · gas $${uniswapGasUSD.toFixed(4)}`,
+  };
+
+  return { okx: okxScore, uniswap: uniswapScore };
+}
+
+// ─────────────────────────────────────────────────────────────
+// OKX quote/swap (unchanged, refactored into helpers)
+// ─────────────────────────────────────────────────────────────
 
 export async function getSwapQuote(req: SwapRequest) {
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
@@ -76,9 +287,6 @@ export async function getSwapQuote(req: SwapRequest) {
   if (json.code !== '0') throw new Error(`OKX quote error: ${json.msg}`);
 
   const q = json.data[0];
-
-  // spender: try to extract from dexRouterList, fallback if not found
-  // OKX quote API returns router address via various paths (router / routerAddress / dexProtocol.router)
   const spender: string = OKX_ROUTER_XLAYER;
 
   const addrToSymbol: Record<string, string> = {
@@ -103,11 +311,9 @@ export async function getSwapQuote(req: SwapRequest) {
     toTokenUnitPrice: q.toToken?.tokenUnitPrice || '0',
     fromTokenAddress: fromAddr,
     toTokenAddress: toAddr,
-    spender,  // spender address for approve
+    spender,
   };
 }
-
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export async function getSwapTxData(req: SwapRequest) {
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || req.fromToken || '';
@@ -155,6 +361,85 @@ export async function getSwapTxData(req: SwapRequest) {
   };
 }
 
+// ─────────────────────────────────────────────────────────────
+// Phase 2: Smart route selection
+// Checks liquidity → if sufficient, scores OKX vs Uniswap
+// ─────────────────────────────────────────────────────────────
+
+const LIQUIDITY_THRESHOLD_USD = 50_000; // below this → OKX only
+
+export async function selectBestRoute(
+  req: SwapRequest,
+): Promise<{ quote: any; decision: RouteDecision }> {
+  const chainId = req.chainId ?? 196; // default X Layer
+  const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken||'').toUpperCase()] || '';
+  const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken||'').toUpperCase()]   || '';
+
+  // Step 1: OKX quote (always available on X Layer)
+  const okxQuote = await getSwapQuote(req);
+  const okxAmount = parseFloat(okxQuote.toAmount);
+  const okxGasUSD = parseFloat(okxQuote.estimateGasFee || '0') / 1e18 * 40; // rough OKB price
+
+  // Step 2: Liquidity check
+  const liquidityUSD = await getUniswapPoolLiquidity(chainId, fromAddr, toAddr);
+  console.log(`📊 Uniswap pool liquidity: $${liquidityUSD.toLocaleString()}`);
+
+  if (liquidityUSD < LIQUIDITY_THRESHOLD_USD || !UNISWAP_SUPPORTED_CHAINS[chainId]) {
+    const reason = liquidityUSD < LIQUIDITY_THRESHOLD_USD
+      ? `Uniswap liquidity $${liquidityUSD.toFixed(0)} below threshold $${LIQUIDITY_THRESHOLD_USD} → OKX fixed`
+      : `Chain ${chainId} not supported by Uniswap → OKX fixed`;
+    console.log(`   ${reason}`);
+
+    const { okx } = scoreRoutes(okxAmount, null, liquidityUSD, okxGasUSD, 0);
+    return {
+      quote: okxQuote,
+      decision: {
+        selected: 'OKX',
+        okx,
+        uniswap: null,
+        reason,
+        liquidityUSD,
+      },
+    };
+  }
+
+  // Step 3: Uniswap quote
+  const stablecoins = ['USDC', 'USDT', 'USDT0', 'USDG', 'DAI'];
+  const fromSym = (req.fromTokenSymbol || req.fromToken || '').toUpperCase();
+  const decimals = stablecoins.includes(fromSym) ? 6 : 18;
+  const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
+
+  const uniResult = await getUniswapQuote(chainId, fromAddr, toAddr, amountRaw);
+  const uniAmount = uniResult?.toAmount ?? null;
+  const uniGasUSD = uniResult?.gasUSD ?? 0;
+
+  // Step 4: Score both routes
+  const { okx: okxScore, uniswap: uniswapScore } = scoreRoutes(
+    okxAmount, uniAmount, liquidityUSD, okxGasUSD, uniGasUSD,
+  );
+
+  const selectedRoute = (uniswapScore && uniswapScore.totalScore > okxScore.totalScore)
+    ? 'Uniswap' : 'OKX';
+
+  const winnerScore  = selectedRoute === 'OKX' ? okxScore : uniswapScore!;
+  const loserScore   = selectedRoute === 'OKX' ? uniswapScore! : okxScore;
+
+  console.log(`🏆 Route selected: ${selectedRoute} (score ${winnerScore.totalScore.toFixed(3)} vs ${loserScore.totalScore.toFixed(3)})`);
+  console.log(`   ${winnerScore.reason}`);
+
+  const decision: RouteDecision = {
+    selected: selectedRoute,
+    okx: okxScore,
+    uniswap: uniswapScore,
+    reason: `${selectedRoute} wins · score ${winnerScore.totalScore.toFixed(3)} vs ${loserScore.totalScore.toFixed(3)}`,
+    liquidityUSD,
+  };
+
+  return { quote: okxQuote, decision };
+}
+
+// ─────────────────────────────────────────────────────────────
+
 export async function handleDexQuery(query: string, userAddress?: string, existingQuote?: any): Promise<any> {
   const isSwap = /swap|buy|sell|trade/i.test(query);
   const okbToUsdc = /okb.*usdc|wokb.*usdc/i.test(query);
@@ -176,12 +461,15 @@ export async function handleDexQuery(query: string, userAddress?: string, existi
   }
 
   if (isSwap) {
-    return getSwapQuote({
+    const req: SwapRequest = {
       fromToken: okbToUsdc ? 'WOKB' : 'USDC',
       toToken:   okbToUsdc ? 'USDC' : 'WOKB',
       amount: existingQuote?.fromAmount || '1.0',
       userAddress: '0x0000000000000000000000000000000000000001',
-    });
+    };
+    // Phase 2: use smart route selection
+    const { quote, decision } = await selectBestRoute(req);
+    return { ...quote, routeDecision: decision };
   }
 
   return { agent: 'dex', query, status: 'unsupported query' };

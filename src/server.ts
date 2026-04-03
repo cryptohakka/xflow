@@ -11,7 +11,6 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { paymentMiddleware, x402ResourceServer } from '@x402/express';
-
 import { HTTPFacilitatorClient } from '@x402/core/server';
 import { ExactEvmScheme } from '@x402/evm/exact/server';
 import { orchestrate } from './orchestrator.js';
@@ -32,8 +31,21 @@ function avgLatencyMs(): number | null {
   return Math.round(decisionLatencyMs.reduce((a, b) => a + b, 0) / decisionLatencyMs.length);
 }
 
+// ── Route Decision Log (in-memory, last 50) ───────────────────
+interface RouteDecisionEntry {
+  timestamp: string;
+  fromToken: string;
+  toToken: string;
+  fromAmount: string;
+  routeDecision: any;
+}
+const recentRouteDecisions: RouteDecisionEntry[] = [];
+function recordRouteDecision(entry: RouteDecisionEntry) {
+  recentRouteDecisions.unshift(entry);
+  if (recentRouteDecisions.length > 50) recentRouteDecisions.pop();
+}
+
 // ── Gas Saved tracker ─────────────────────────────────────────
-// Accumulates (max gas chain - selected chain) per swap
 const GAS_SAVED_FILE = 'gas_saved.json';
 
 let totalGasSavedUSD = 0;
@@ -66,9 +78,9 @@ const evmScheme = new ExactEvmScheme();
 const x402Server = new x402ResourceServer(facilitatorClient, {
   url: `http://localhost:${process.env.PORT || 3010}/swap`
 })
-  .register('eip155:196', evmScheme)
-  .register('eip155:8453', evmScheme)
-  .register('eip155:137', evmScheme)
+  .register('eip155:196',   evmScheme)
+  .register('eip155:8453',  evmScheme)
+  .register('eip155:137',   evmScheme)
   .register('eip155:43114', evmScheme);
 
 const USDC_ADDRESSES: Record<string, string> = {
@@ -119,10 +131,10 @@ app.use(paymentMiddleware(paymentConfig, x402Server, undefined, undefined, false
 
 // ── /best-network config ──────────────────────────────────────
 const BEST_NETWORK_CONFIG = [
-  { network: 'eip155:8453',  name: 'Base',      rpc: 'https://mainnet.base.org',                    finalitySeconds: 2.0, coingeckoId: 'ethereum' },
-  { network: 'eip155:137',   name: 'Polygon',   rpc: 'https://polygon-bor-rpc.publicnode.com',      finalitySeconds: 5.0, coingeckoId: 'polygon-ecosystem-token' },
-  { network: 'eip155:43114', name: 'Avalanche', rpc: 'https://api.avax.network/ext/bc/C/rpc',       finalitySeconds: 0.8, coingeckoId: 'avalanche-2' },
-  { network: 'eip155:196',   name: 'X Layer',   rpc: 'https://rpc.xlayer.tech',                     finalitySeconds: 1.0, coingeckoId: 'okb' },
+  { network: 'eip155:8453',  name: 'Base',      rpc: 'https://mainnet.base.org',               finalitySeconds: 2.0, coingeckoId: 'ethereum' },
+  { network: 'eip155:137',   name: 'Polygon',   rpc: 'https://polygon-bor-rpc.publicnode.com', finalitySeconds: 5.0, coingeckoId: 'polygon-ecosystem-token' },
+  { network: 'eip155:43114', name: 'Avalanche', rpc: 'https://api.avax.network/ext/bc/C/rpc',  finalitySeconds: 0.8, coingeckoId: 'avalanche-2' },
+  { network: 'eip155:196',   name: 'X Layer',   rpc: 'https://rpc.xlayer.tech',                finalitySeconds: 1.0, coingeckoId: 'okb' },
 ];
 const FINALITY_WEIGHT = 0.0001;
 const FALLBACK_PRICES: Record<string, number> = {
@@ -131,13 +143,15 @@ const FALLBACK_PRICES: Record<string, number> = {
 
 // ── Routes ────────────────────────────────────────────────────
 
+app.get('/', (_req: Request, res: Response) => {
+  res.redirect('/dashboard.html');
+});
+
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'XFlow', version: '0.1.0' });
 });
 
-// ── GET /best-network  (no x402) ─────────────────────────────
-// Returns the best network for x402 payment based on USDC balances,
-// gas cost, and finality time. Called by client-agent before /swap.
+// ── GET /best-network ─────────────────────────────────────────
 app.get('/best-network', async (req: Request, res: Response) => {
   const { address } = req.query;
   if (!address || typeof address !== 'string') {
@@ -145,7 +159,6 @@ app.get('/best-network', async (req: Request, res: Response) => {
   }
 
   try {
-    // Single CoinGecko request for all native token prices
     const ids = BEST_NETWORK_CONFIG.map(n => n.coingeckoId).join(',');
     const nativePrices: Record<string, number> = {};
     try {
@@ -165,10 +178,10 @@ app.get('/best-network', async (req: Request, res: Response) => {
       }
     }
 
-    // Check USDC balances across all networks
-    const balances = await checkBalances(address);
+    const allBalancesRaw = await checkBalances(address);
+    const configNetworks = BEST_NETWORK_CONFIG.map(n => n.network);
+    const balances = allBalancesRaw.filter(b => configNetworks.includes(b.network));
 
-    // Fetch gas prices in parallel (RPC calls)
     const { createPublicClient, http: viemHttp } = await import('viem');
     const gasPrices = await Promise.all(
       BEST_NETWORK_CONFIG.map(async (n) => {
@@ -187,8 +200,9 @@ app.get('/best-network', async (req: Request, res: Response) => {
     const estimatedGas = 100000n;
     const allBalances = balances.map((b, i) => {
       const n = BEST_NETWORK_CONFIG[i];
-      const gasCostNative = gasPrices[i] * estimatedGas;
-      const priceUSD = nativePrices[n.network];
+      const gasPrice = gasPrices[i] ?? 0n;
+      const gasCostNative = gasPrice * estimatedGas;
+      const priceUSD = nativePrices[n.network] ?? 1;
       const gasCostUSD = Number(gasCostNative) / 1e18 * priceUSD;
       const score = gasCostUSD + n.finalitySeconds * FINALITY_WEIGHT;
       return { ...b, balance: b.balance.toString(), gasCostUSD, finalitySeconds: n.finalitySeconds, score };
@@ -206,6 +220,7 @@ app.get('/best-network', async (req: Request, res: Response) => {
   }
 });
 
+// ── POST /confirm ─────────────────────────────────────────────
 app.post('/confirm', async (req: Request, res: Response) => {
   try {
     const {
@@ -216,7 +231,6 @@ app.post('/confirm', async (req: Request, res: Response) => {
 
     if (!txHash) return res.status(400).json({ error: 'txHash required' });
 
-    // Swap completion log
     console.log(`\n${'─'.repeat(55)}`);
     console.log(`✅ Swap complete`);
     console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
@@ -227,7 +241,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
     const { recordSwapOnchain, recordA2ACallOnchain, recordX402PaymentOnchain } = await import('./analyticsAgent.js');
 
     const analyticsTx = await recordSwapOnchain({
-      agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
+      agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
       fromToken:      fromToken      || 'USDC',
       toToken:        toToken        || 'USDC',
       fromAmount:     fromAmount     || '0',
@@ -238,23 +252,22 @@ app.post('/confirm', async (req: Request, res: Response) => {
       txHash:         txHash,
     });
 
-    // Record X402 payments (fire-and-forget)
     if (swapX402TxHash) {
       await recordX402PaymentOnchain({
-        agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
-        endpoint: '/swap',
-        feePaid: '0.001',
+        agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
+        endpoint:       '/swap',
+        feePaid:        '0.001',
         paymentNetwork: paymentNetwork || 'unknown',
-        paymentTxHash: swapX402TxHash,
+        paymentTxHash:  swapX402TxHash,
       }).catch((e: any) => console.warn('[Confirm] swap X402 record failed:', e.message));
     }
     if (confirmX402TxHash) {
       await recordX402PaymentOnchain({
-        agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
-        endpoint: '/confirm',
-        feePaid: '0.001',
+        agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
+        endpoint:       '/confirm',
+        feePaid:        '0.001',
         paymentNetwork: paymentNetwork || 'unknown',
-        paymentTxHash: confirmX402TxHash,
+        paymentTxHash:  confirmX402TxHash,
       }).catch((e: any) => console.warn('[Confirm] confirm X402 record failed:', e.message));
     }
 
@@ -263,11 +276,11 @@ app.post('/confirm', async (req: Request, res: Response) => {
       const { analyzeSwapWithClawdMint } = await import('./clawdmintA2A.js');
       const analysis = await analyzeSwapWithClawdMint({
         txHash,
-        fromToken:  fromToken  || 'USDC',
-        toToken:    toToken    || 'USDC',
-        fromAmount: fromAmount || '0',
-        toAmount:   toAmount   || '0',
-        chainId: 196,
+        fromToken:    fromToken    || 'USDC',
+        toToken:      toToken      || 'USDC',
+        fromAmount:   fromAmount   || '0',
+        toAmount:     toAmount     || '0',
+        chainId:      196,
         agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
       });
       clawdmint = {
@@ -288,27 +301,40 @@ app.post('/confirm', async (req: Request, res: Response) => {
   }
 });
 
+// ── GET /dashboard ────────────────────────────────────────────
 app.get('/dashboard', async (_req: Request, res: Response) => {
   try {
     const { getDashboardData } = await import('./analyticsAgent.js');
     const data = await getDashboardData();
-    // avgDecisionMs is read from in-memory session data (no on-chain storage needed)
-    res.json({ ...data, avgDecisionMs: avgLatencyMs(), totalGasSavedUSD, gasSavedTxCount });
+
+    // Merge routeDecision into recentSwaps by token pair + timestamp proximity
+    const swapsWithDecision = (data.recentSwaps || []).map((s: any) => {
+      const match = recentRouteDecisions.find(d =>
+        d.fromToken === s.fromToken &&
+        d.toToken   === s.toToken   &&
+        Math.abs(new Date(d.timestamp).getTime() - new Date(s.timestamp).getTime()) < 30000
+      );
+      return match ? { ...s, routeDecision: match.routeDecision } : s;
+    });
+
+    res.json({
+      ...data,
+      recentSwaps: swapsWithDecision,
+      avgDecisionMs:    avgLatencyMs(),
+      totalGasSavedUSD,
+      gasSavedTxCount,
+    });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });
 
 // ── POST /swap  (x402 protected) ──────────────────────────────
-// Returns quote + risk assessment only. TX data is not included.
-// The client-agent uses this response to evaluate allowance/approve,
-// then calls /tx right before broadcast to get fresh TX data.
 app.post('/swap', async (req: Request, res: Response) => {
   const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta } = req.body;
 
   if (!query) return res.status(400).json({ error: 'query is required' });
 
-  // ── Phase 1: SmartPaymentRouter ──────────────────────────────
   console.log('\n════════════════════════════════════════════════════════════');
   console.log('1️⃣  Smart Payment Router');
   console.log('════════════════════════════════════════════════════════════');
@@ -324,7 +350,6 @@ app.post('/swap', async (req: Request, res: Response) => {
   console.log(`✅ XFlow got paid ($0.001 USDC)`);
   console.log('════════════════════════════════════════════════════════════\n');
 
-  // ── Phase 2: Quote + Risk ────────────────────────────────────
   console.log('2️⃣  Quote + Risk Assessment (X Layer)');
   console.log('════════════════════════════════════════════════════════════');
 
@@ -341,11 +366,23 @@ app.post('/swap', async (req: Request, res: Response) => {
     });
     const decisionMs = Math.round(performance.now() - t0);
     recordLatency(decisionMs);
-    // Gas saved: max(allBalances.gasCostUSD) - selectedGasCostUSD
+
     if (_routerMeta?.allBalances && _routerMeta?.selectedGasCostUSD != null) {
       recordGasSaved(_routerMeta.allBalances, _routerMeta.selectedGasCostUSD);
       console.log(`⛽ Gas saved this tx: $${(Math.max(..._routerMeta.allBalances.map((b:any)=>b.gasCostUSD||0)) - _routerMeta.selectedGasCostUSD).toFixed(6)} · total saved: $${totalGasSavedUSD.toFixed(6)}`);
     }
+
+    // Record routeDecision for dashboard
+    if (result?.data?.routeDecision) {
+      recordRouteDecision({
+        timestamp:    new Date().toISOString(),
+        fromToken:    result?.intent?.fromToken || '',
+        toToken:      result?.intent?.toToken   || '',
+        fromAmount:   result?.intent?.amount    || '',
+        routeDecision: result.data.routeDecision,
+      });
+    }
+
     console.log(`⚡ Decision latency: ${decisionMs}ms`);
     res.json({ success: true, result, intent: result.intent, decisionMs });
   } catch (e: any) {
@@ -353,9 +390,7 @@ app.post('/swap', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /analysisReceived  (no x402) ───────────────────────────
-// Called by client-agent after receiving ClawdMint analysis.
-// Records the /confirm X402 TX hash.
+// ── POST /analysisReceived ────────────────────────────────────
 app.post('/analysisReceived', async (req: Request, res: Response) => {
   try {
     const { agentAddress, confirmX402TxHash, paymentNetwork } = req.body;
@@ -364,11 +399,11 @@ app.post('/analysisReceived', async (req: Request, res: Response) => {
     if (confirmX402TxHash) console.log(`   TX:${explorerLink(confirmX402TxHash, paymentNetwork || 'base')}`);
     if (confirmX402TxHash) {
       await recordX402PaymentOnchain({
-        agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
-        endpoint: '/confirm',
-        feePaid: '0.001',
+        agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
+        endpoint:       '/confirm',
+        feePaid:        '0.001',
         paymentNetwork: paymentNetwork || 'unknown',
-        paymentTxHash: confirmX402TxHash,
+        paymentTxHash:  confirmX402TxHash,
       }).catch((e: any) => console.warn('[analysisReceived] X402 record failed:', e.message));
     }
     res.json({ success: true });
@@ -377,8 +412,7 @@ app.post('/analysisReceived', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /tx  (no x402 — already paid via /swap) ─────────────
-// Called right before broadcast. Returns fresh TX data.
+// ── POST /tx  (no x402) ───────────────────────────────────────
 app.post('/tx', async (req: Request, res: Response) => {
   const { query, userAddress, fromTokenAddress, toTokenAddress, parsedIntent } = req.body;
 
@@ -414,7 +448,7 @@ app.post('/tx', async (req: Request, res: Response) => {
   }
 });
 
-// ── Start ────────────────────────────────────────────────────
+// ── Start ─────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3010;
 
 (async () => {

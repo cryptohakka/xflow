@@ -30,46 +30,23 @@
   .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 1.5s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-  /* ── KPI Layout: Global bar + two columns ── */
+  /* ── KPI Layout ── */
   .kpi-outer { padding:2rem 2rem 0; display:flex; flex-direction:column; gap:1.5rem; }
-
-  /* Global row */
-  .global-row {
-    display:grid; grid-template-columns:repeat(3,1fr); gap:1rem;
-    padding-bottom:1.5rem; border-bottom:1px solid var(--border);
-  }
-  .global-card {
-    background:var(--card); border:1px solid rgba(167,139,250,0.2);
-    border-radius:14px; padding:1.5rem 2rem; display:flex; flex-direction:column; gap:0.4rem;
-    position:relative; overflow:hidden;
-  }
-  .global-card::before {
-    content:''; position:absolute; top:0; left:0; right:0; height:2px;
-    background:linear-gradient(90deg,var(--purple),transparent);
-  }
+  .global-row { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; padding-bottom:1.5rem; border-bottom:1px solid var(--border); }
+  .global-card { background:var(--card); border:1px solid rgba(167,139,250,0.2); border-radius:14px; padding:1.5rem 2rem; display:flex; flex-direction:column; gap:0.4rem; position:relative; overflow:hidden; }
+  .global-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:linear-gradient(90deg,var(--purple),transparent); }
   .global-label { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--purple); letter-spacing:0.2em; }
   .global-value { font-size:3rem; font-weight:700; color:var(--purple); line-height:1; }
   .global-sub { font-size:0.85rem; color:var(--dim); }
-
-  /* Two-column layer layout */
   .layers-row { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
-
-  /* Layer panel */
   .layer-panel { display:flex; flex-direction:column; gap:1rem; }
   .layer-header { display:flex; align-items:center; gap:0.75rem; margin-bottom:0.25rem; }
   .layer-label { font-family:'Share Tech Mono',monospace; font-size:0.65rem; letter-spacing:0.18em; padding:0.25rem 0.7rem; border-radius:4px; font-weight:700; white-space:nowrap; }
   .layer-label.payment   { background:rgba(251,146,60,0.12);  color:var(--orange); border:1px solid rgba(251,146,60,0.3); }
   .layer-label.execution { background:rgba(0,255,148,0.08);   color:var(--green);  border:1px solid rgba(0,255,148,0.25); }
   .layer-divider { flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
-
   .kpi-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0.85rem; }
-
-  /* Stat cards */
-  .stat-card {
-    background:var(--card); border:1px solid var(--border);
-    border-radius:12px; padding:1.25rem 1.5rem;
-    transition:border-color 0.3s; position:relative; overflow:hidden;
-  }
+  .stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.25rem 1.5rem; transition:border-color 0.3s; position:relative; overflow:hidden; }
   .stat-card:hover { border-color:rgba(0,212,255,0.35); }
   .stat-card.payment-card  { border-color:rgba(251,146,60,0.15); }
   .stat-card.payment-card:hover  { border-color:rgba(251,146,60,0.4); }
@@ -80,8 +57,6 @@
   .stat-label { font-family:'Share Tech Mono',monospace; font-size:0.62rem; color:var(--dim); letter-spacing:0.12em; margin-bottom:0.5rem; }
   .stat-value { font-size:2.2rem; font-weight:700; line-height:1; }
   .stat-sub { font-size:0.78rem; color:var(--dim); margin-top:0.35rem; }
-
-  /* Bar chart inside stat-card */
   .inline-bars { margin-top:0.75rem; display:flex; flex-direction:column; gap:0.4rem; }
   .inline-bar-item { display:flex; align-items:center; gap:0.5rem; font-family:'Share Tech Mono',monospace; font-size:0.6rem; }
   .inline-bar-name { color:var(--dim); width:72px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -89,12 +64,12 @@
   .inline-bar-fill { height:100%; border-radius:2px; transition:width 1s ease; }
   .inline-bar-count { color:var(--dim); width:16px; text-align:right; flex-shrink:0; }
 
-  /* Section */
+  /* ── Section ── */
   .section { padding:0 2rem 2rem; }
   .section-title { font-family:'Share Tech Mono',monospace; font-size:0.72rem; color:var(--accent); letter-spacing:0.2em; margin-bottom:1rem; display:flex; align-items:center; gap:0.75rem; }
   .section-title::after { content:''; flex:1; height:1px; background:linear-gradient(90deg,var(--border),transparent); }
 
-  /* A2A Diagram */
+  /* ── A2A Diagram ── */
   .a2a-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; margin-bottom:2rem; }
   .a2a-flow { display:flex; align-items:stretch; overflow-x:auto; padding-bottom:0.5rem; }
   .a2a-col { display:flex; flex-direction:column; align-items:center; gap:0.5rem; flex:1; min-width:130px; }
@@ -120,7 +95,7 @@
   .a2a-arrow-label { font-family:'Share Tech Mono',monospace; font-size:0.55rem; color:var(--dim); text-align:center; white-space:nowrap; line-height:1.3; }
   .payment-pill { display:inline-block; background:rgba(251,146,60,0.15); color:var(--orange); border:1px solid rgba(251,146,60,0.3); border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:0.55rem; padding:0.1rem 0.35rem; margin-top:0.3rem; }
 
-  /* Tooltip */
+  /* ── Tooltip ── */
   .route-reason { display:inline-flex; align-items:center; gap:0.3rem; cursor:default; position:relative; }
   .route-reason-icon { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:var(--accent); opacity:0.6; border:1px solid rgba(0,212,255,0.3); border-radius:50%; width:14px; height:14px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
   .route-reason-tooltip { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:100; background:#0d1f3c; border:1px solid rgba(0,212,255,0.25); border-radius:8px; padding:0.6rem 0.8rem; min-width:220px; max-width:280px; font-family:'Share Tech Mono',monospace; font-size:0.62rem; color:var(--text); line-height:1.6; white-space:normal; pointer-events:none; box-shadow:0 4px 20px rgba(0,0,0,0.5); }
@@ -130,7 +105,7 @@
   .tooltip-key { color:var(--dim); } .tooltip-val { color:var(--accent); font-weight:600; }
   .tooltip-winner { color:var(--green); font-size:0.65rem; margin-top:0.4rem; padding-top:0.4rem; border-top:1px solid rgba(0,212,255,0.1); }
 
-  /* Filter Tabs */
+  /* ── Filter Tabs ── */
   .filter-bar { display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap; }
   .filter-btn { font-family:'Share Tech Mono',monospace; font-size:0.68rem; letter-spacing:0.08em; padding:0.35rem 0.9rem; border-radius:6px; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--dim); transition:all 0.2s; }
   .filter-btn:hover { border-color:rgba(0,212,255,0.4); color:var(--text); }
@@ -139,7 +114,7 @@
   .filter-btn.f-failed.active  { background:rgba(255,71,87,0.1);  border-color:rgba(255,71,87,0.35); color:var(--red); }
   .filter-btn.f-highrisk.active{ background:rgba(255,215,0,0.1);  border-color:rgba(255,215,0,0.3);  color:var(--gold); }
 
-  /* Activity Table */
+  /* ── Activity Table ── */
   .swap-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .swap-row {
     display:grid;
@@ -165,18 +140,44 @@
   .risk-HIGH   { background:rgba(255,71,87,0.1);  color:var(--red);   border:1px solid rgba(255,71,87,0.2); }
   .network-tag { font-family:'Share Tech Mono',monospace; font-size:0.68rem; padding:0.15rem 0.5rem; border-radius:4px; background:rgba(0,212,255,0.08); color:var(--accent); border:1px solid rgba(0,212,255,0.15); }
 
+  /* ── Decision Log ── */
+  .decision-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .decision-row {
+    display:grid;
+    grid-template-columns: 1.1fr 0.7fr 1fr 1fr 0.8fr 0.8fr 0.6fr 2fr;
+    padding:0.85rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04);
+    font-size:0.85rem; align-items:center; transition:background 0.2s;
+  }
+  .decision-row:hover { background:rgba(0,212,255,0.03); }
+  .decision-row.header { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); }
+  .decision-row:last-child { border-bottom:none; }
+  .route-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:0.65rem; font-weight:700; }
+  .route-okx     { background:rgba(0,212,255,0.1);  color:var(--accent); border:1px solid rgba(0,212,255,0.25); }
+  .route-uniswap { background:rgba(0,255,148,0.1);  color:var(--green);  border:1px solid rgba(0,255,148,0.25); }
+  .score-bar { display:flex; align-items:center; gap:0.5rem; }
+  .score-bar-track { width:70px; height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .score-bar-fill { height:100%; border-radius:3px; }
+  .score-num { font-family:'Share Tech Mono',monospace; font-size:0.63rem; color:var(--dim); min-width:32px; }
+  .decision-reason { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .liq-val { font-family:'Share Tech Mono',monospace; font-size:0.68rem; }
+
   .loading { text-align:center; padding:4rem; color:var(--dim); font-family:'Share Tech Mono',monospace; font-size:0.85rem; }
   .no-rows  { padding:2rem; text-align:center; color:var(--dim); font-family:monospace; font-size:0.85rem; }
 
   @media(max-width:1100px) {
     .layers-row { grid-template-columns:1fr; }
     .kpi-grid-2  { grid-template-columns:repeat(2,1fr); }
+    .decision-row { grid-template-columns: 1.1fr 0.7fr 1fr 1fr 0.6fr 2fr; }
+    .decision-row > *:nth-child(5),
+    .decision-row > *:nth-child(6) { display:none; }
   }
   @media(max-width:700px) {
     .global-row { grid-template-columns:1fr 1fr; }
     .kpi-grid-2 { grid-template-columns:1fr 1fr; }
     .swap-row { grid-template-columns:1.4fr 1.1fr 0.6fr 1fr; }
     .swap-row>*:nth-child(n+5) { display:none; }
+    .decision-row { grid-template-columns: 1fr 0.7fr 1fr 2fr; }
+    .decision-row > *:nth-child(n+4):not(:last-child) { display:none; }
     .a2a-flow { flex-direction:column; }
   }
 </style>
@@ -225,7 +226,7 @@
       </div>
       <div class="a2a-col">
         <div class="a2a-sub-col">
-          <div class="a2a-node agent"><div class="a2a-node-title">DEX AGENT</div><div class="a2a-node-sub">OKX Aggregator<br>quote &amp; route</div></div>
+          <div class="a2a-node agent"><div class="a2a-node-title">DEX AGENT</div><div class="a2a-node-sub">OKX + Uniswap<br>multi-factor route</div></div>
           <div class="a2a-node agent"><div class="a2a-node-title">RISK AGENT</div><div class="a2a-node-sub">slippage + price<br>impact guard</div></div>
           <div class="a2a-node agent"><div class="a2a-node-title">ANALYTICS</div><div class="a2a-node-sub">volume tracking<br>chain metrics</div></div>
         </div>
@@ -256,18 +257,20 @@
 <script>
 const NETWORK_NAMES = {
   'eip155:8453':'Base','eip155:137':'Polygon','eip155:43114':'Avalanche',
-  'eip155:196':'X Layer','eip155:2741':'Abstract',
+  'eip155:196':'X Layer','eip155:2741':'Abstract','eip155:1329':'Sei',
+  'eip155:1564830818':'SKALE','eip155:3338':'Peaq',
   'avalanche':'Avalanche','polygon':'Polygon','base':'Base','xlayer':'X Layer'
 };
 const NETWORK_COLORS = {
   'eip155:8453':'#0052ff','eip155:137':'#8247e5','eip155:43114':'#e84142',
-  'eip155:196':'#00d4ff','eip155:2741':'#00ff94',
+  'eip155:196':'#00d4ff','eip155:2741':'#00ff94','eip155:1329':'#ff6b6b',
+  'eip155:1564830818':'#a78bfa','eip155:3338':'#fb923c',
   'avalanche':'#e84142','polygon':'#8247e5','base':'#0052ff','xlayer':'#00d4ff'
 };
 const EXPLORER_TX = {
   'eip155:8453':'https://basescan.org/tx/','eip155:137':'https://polygonscan.com/tx/',
   'eip155:43114':'https://snowtrace.io/tx/','eip155:196':'https://www.okx.com/web3/explorer/xlayer/tx/',
-  'eip155:2741':'https://abscan.org/tx/',
+  'eip155:2741':'https://abscan.org/tx/','eip155:1329':'https://seitrace.com/tx/',
   'avalanche':'https://snowtrace.io/tx/','polygon':'https://polygonscan.com/tx/',
   'base':'https://basescan.org/tx/','xlayer':'https://www.okx.com/web3/explorer/xlayer/tx/',
 };
@@ -276,6 +279,8 @@ const CHAIN_PARAMS = {
   'eip155:137': { name:'Polygon',tps:65,finality:3.5,gasCostUSD:0.002 },
   'eip155:43114':{ name:'Avalanche',tps:4500,finality:0.8,gasCostUSD:0.003 },
   'eip155:196': { name:'X Layer',tps:50,finality:1.0,gasCostUSD:0.0005 },
+  'eip155:1329':{ name:'Sei',tps:12000,finality:0.4,gasCostUSD:0.0002 },
+  'eip155:2741':{ name:'Abstract',tps:200,finality:1.0,gasCostUSD:0.0008 },
   'base':{ name:'Base',tps:100,finality:2.0,gasCostUSD:0.001 },
   'polygon':{ name:'Polygon',tps:65,finality:3.5,gasCostUSD:0.002 },
   'avalanche':{ name:'Avalanche',tps:4500,finality:0.8,gasCostUSD:0.003 },
@@ -328,6 +333,8 @@ function render(data){
     const pad=n=>String(n).padStart(2,'0');
     return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${d.toLocaleTimeString()}`;
   };
+  window._agentShort=agentShort;
+  window._timeStr=timeStr;
 
   // GLOBAL
   const agentSet=new Set([
@@ -344,8 +351,6 @@ function render(data){
   const totalA2A=parseInt(data.totalA2ACalls)||0;
   const networkBreakdown=data.networkBreakdown||{};
   const networkMax=Math.max(...Object.values(networkBreakdown).map(Number),1);
-
-  // GAS SAVED: cumulative (max(allBalances.gasCostUSD) - selected) per swap, accumulated server-side
   const gasSaved=parseFloat(data.totalGasSavedUSD)||0;
   const gasSavedTxCount=parseInt(data.gasSavedTxCount)||0;
   const gasSavedStr='$'+gasSaved.toFixed(6);
@@ -358,7 +363,6 @@ function render(data){
   const routeBreakdown=data.routeBreakdown||{};
   const routeMax=Math.max(...Object.values(routeBreakdown).map(Number),1);
 
-  // AVG slippage
   const validSwaps=(data.recentSwaps||[]).filter(s=>parseFloat(s.fromAmount)>0&&parseFloat(s.toAmount)>0);
   let avgSlippage='—';
   if(validSwaps.length>0){
@@ -373,11 +377,10 @@ function render(data){
   const x402Rows  =(data.recentX402Payments||[]).map(p=>({...p,_rowType:'x402'}));
   const allRows   =[...swapRows,...failedRows,...x402Rows]
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
-  window._allRows=allRows; window._agentShort=agentShort; window._timeStr=timeStr;
+  window._allRows=allRows;
 
   const execSuccessColor=parseFloat(execSuccess)>=90?'var(--green)':parseFloat(execSuccess)>=70?'var(--gold)':'var(--red)';
 
-  // Inline bar helpers
   const netBars=Object.entries(networkBreakdown).slice(0,4).map(([net,count])=>`
     <div class="inline-bar-item">
       <span class="inline-bar-name">${NETWORK_NAMES[net]||net}</span>
@@ -394,8 +397,6 @@ function render(data){
 
   document.getElementById('app').innerHTML=`
     <div class="kpi-outer">
-
-      <!-- GLOBAL row -->
       <div>
         <div class="layer-header" style="margin-bottom:0.75rem">
           <span class="layer-label" style="background:rgba(167,139,250,0.12);color:var(--purple);border:1px solid rgba(167,139,250,0.25)">GLOBAL</span>
@@ -421,42 +422,35 @@ function render(data){
         </div>
       </div>
 
-      <!-- Two-column layers -->
       <div class="layers-row">
-
-        <!-- LEFT: Payment Layer -->
-        <div class="layer-panel" id="payment-panel">
+        <!-- Payment Layer -->
+        <div class="layer-panel">
           <div class="layer-header">
             <span class="layer-label payment">PAYMENT LAYER · x402</span>
             <div class="layer-divider"></div>
             <span style="font-family:'Share Tech Mono',monospace;font-size:0.58rem;color:var(--dim)">WHO PAYS · HOW MUCH · WHERE</span>
           </div>
           <div class="kpi-grid-2">
-
             <div class="stat-card payment-card">
               <div class="stat-label">A2A CALLS</div>
               <div class="stat-value" style="color:var(--orange)">${totalA2A}</div>
               <div class="stat-sub">ClawdMint · all-time</div>
             </div>
-
             <div class="stat-card payment-card">
               <div class="stat-label">TOTAL FEES EARNED</div>
               <div class="stat-value" style="color:var(--gold)">$${totalFees.toFixed(4)}</div>
               <div class="stat-sub">XFlow revenue · all-time</div>
             </div>
-
             <div class="stat-card payment-card">
               <div class="stat-label">AGENT DECISION LATENCY</div>
               <div class="stat-value" style="color:var(--green);font-size:1.8rem">${avgDecisionMs}</div>
               <div class="stat-sub">Avg. AI route decision · session</div>
             </div>
-
             <div class="stat-card payment-card">
               <div class="stat-label">GAS SAVED BY SMART ROUTER</div>
               <div class="stat-value" style="color:${gasSaved>0?'var(--green)':'var(--dim)'};font-size:1.8rem">${gasSavedStr}</div>
               <div class="stat-sub">vs highest-cost chain · ${gasSavedTxCount} swaps</div>
             </div>
-
             <div class="stat-card payment-card" style="grid-column:1/-1">
               <div class="stat-label">x402 PAYMENT CHAINS</div>
               <div class="inline-bars">${netBars}</div>
@@ -464,7 +458,7 @@ function render(data){
           </div>
         </div>
 
-        <!-- RIGHT: Execution Layer -->
+        <!-- Execution Layer -->
         <div class="layer-panel">
           <div class="layer-header">
             <span class="layer-label execution">EXECUTION LAYER · DEX</span>
@@ -490,7 +484,7 @@ function render(data){
             <div class="stat-card exec-card">
               <div class="stat-label">AVG SLIPPAGE</div>
               <div class="stat-value" style="font-size:1.8rem;color:${avgSlippage==='—'?'var(--dim)':'var(--green)'}">${avgSlippage}</div>
-              <div class="stat-sub">OKX best-route quality</div>
+              <div class="stat-sub">Best-route quality</div>
             </div>
             <div class="stat-card exec-card" style="grid-column:1/-1">
               <div class="stat-label">DEX ROUTES USED</div>
@@ -498,18 +492,35 @@ function render(data){
             </div>
           </div>
         </div>
+      </div>
+    </div>
 
+    <!-- Decision Log -->
+    <div class="section" style="padding-top:2rem">
+      <div class="section-title">ROUTE DECISION LOG</div>
+      <div class="decision-table">
+        <div class="decision-row header">
+          <span>TIME</span>
+          <span>SELECTED</span>
+          <span>OKX SCORE</span>
+          <span>UNI SCORE</span>
+          <span>OKX P/G</span>
+          <span>UNI P/G</span>
+          <span>LIQUIDITY</span>
+          <span>REASON</span>
+        </div>
+        ${renderDecisionLog(data.recentSwaps)}
       </div>
     </div>
 
     <!-- Activity Table -->
-    <div class="section" style="padding-top:2rem">
+    <div class="section" style="padding-top:0">
       <div class="section-title">RECENT AGENT ACTIVITY</div>
       <div class="filter-bar">
-        <button class="filter-btn f-all     ${activeFilter==='all'     ?'active':''}" onclick="setFilter('all')">ALL</button>
-        <button class="filter-btn f-x402    ${activeFilter==='x402'    ?'active':''}" onclick="setFilter('x402')">X402</button>
-        <button class="filter-btn f-swap    ${activeFilter==='swap'    ?'active':''}" onclick="setFilter('swap')">SWAPS</button>
-        <button class="filter-btn f-failed  ${activeFilter==='failed'  ?'active':''}" onclick="setFilter('failed')">FAILED</button>
+        <button class="filter-btn f-all      ${activeFilter==='all'     ?'active':''}" onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn f-x402     ${activeFilter==='x402'    ?'active':''}" onclick="setFilter('x402')">X402</button>
+        <button class="filter-btn f-swap     ${activeFilter==='swap'    ?'active':''}" onclick="setFilter('swap')">SWAPS</button>
+        <button class="filter-btn f-failed   ${activeFilter==='failed'  ?'active':''}" onclick="setFilter('failed')">FAILED</button>
         <button class="filter-btn f-highrisk ${activeFilter==='highrisk'?'active':''}" onclick="setFilter('highrisk')">HIGH RISK</button>
       </div>
       <div class="swap-table" id="activity-table">
@@ -523,6 +534,64 @@ function render(data){
     </div>`;
 }
 
+// ── Decision Log renderer ──────────────────────────────────────
+function renderDecisionLog(swaps) {
+  const rows = (swaps || []).filter(s => s.routeDecision).slice(0, 15);
+  if (!rows.length) return `<div class="no-rows">No route decisions recorded yet</div>`;
+
+  return rows.map(s => {
+    const d = s.routeDecision;
+    const selected = d.selected || 'OKX';
+    const okx = d.okx || {};
+    const uni = d.uniswap || null;
+    const liqUSD = d.liquidityUSD != null ? d.liquidityUSD : null;
+
+    const selBadge = selected === 'Uniswap'
+      ? `<span class="route-badge route-uniswap">Uniswap</span>`
+      : `<span class="route-badge route-okx">OKX</span>`;
+
+    function scoreBar(score, color) {
+      const pct = Math.min(100, (score || 0) * 100);
+      return `<div class="score-bar">
+        <div class="score-bar-track"><div class="score-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <span class="score-num">${(score || 0).toFixed(3)}</span>
+      </div>`;
+    }
+
+    const okxBar = scoreBar(okx.totalScore, 'var(--accent)');
+    const uniBar = uni
+      ? scoreBar(uni.totalScore, 'var(--green)')
+      : `<span style="font-family:'Share Tech Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.2)">N/A</span>`;
+
+    const okxPG = okx.priceScore != null
+      ? `<span style="font-family:'Share Tech Mono',monospace;font-size:0.63rem;color:var(--dim)">${okx.priceScore.toFixed(2)}/${(okx.gasScore||0).toFixed(2)}</span>`
+      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
+
+    const uniPG = uni && uni.priceScore != null
+      ? `<span style="font-family:'Share Tech Mono',monospace;font-size:0.63rem;color:var(--dim)">${uni.priceScore.toFixed(2)}/${(uni.gasScore||0).toFixed(2)}</span>`
+      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
+
+    const liqCell = liqUSD != null
+      ? `<span class="liq-val" style="color:${liqUSD>=50000?'var(--green)':'var(--gold)'}">$${liqUSD>=1000?(liqUSD/1000).toFixed(0)+'k':liqUSD.toFixed(0)}</span>`
+      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
+
+    const reason = d.reason || '—';
+    const t = window._timeStr ? window._timeStr(s.timestamp) : s.timestamp;
+
+    return `<div class="decision-row">
+      <span style="font-family:monospace;font-size:0.68rem;color:var(--dim)">${t}</span>
+      <span>${selBadge}</span>
+      ${okxBar}
+      ${uniBar}
+      ${okxPG}
+      ${uniPG}
+      ${liqCell}
+      <span class="decision-reason" title="${reason}">${reason}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Activity table renderer ───────────────────────────────────
 function renderRows(allRows,filter,agentShort,timeStr){
   let rows=allRows;
   if(filter==='x402')     rows=allRows.filter(r=>r._rowType==='x402');

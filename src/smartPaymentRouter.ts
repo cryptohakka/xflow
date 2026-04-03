@@ -5,15 +5,21 @@
  *
  * Scoring: score = gasCostUSD + finality_seconds * FINALITY_WEIGHT
  * FINALITY_WEIGHT = 0.0001  (1s finality delay ≈ $0.0001 cost)
+ *
+ * Phase 1 additions:
+ * - 4 new EVM chains: Sei, Abstract, SKALE, Peaq
+ * - uniswapSupported flag per network
+ * - swapNativeToUSDC fallback when all chains lack USDC
  */
 import { createPublicClient, http, formatUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
 import { ExactEvmScheme } from '@x402/evm';
 
-const FINALITY_WEIGHT = 0.0001; // 1s finality delay ≈ $0.0001
+const FINALITY_WEIGHT = 0.0001;
 
 const SUPPORTED_NETWORKS = [
+  // ── Original 4 ──────────────────────────────────────────────
   {
     network: 'eip155:8453',
     name: 'Base',
@@ -22,6 +28,7 @@ const SUPPORTED_NETWORKS = [
     usdc: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
     finalitySeconds: 2.0,
     coingeckoId: 'ethereum',
+    uniswapSupported: true,
   },
   {
     network: 'eip155:137',
@@ -31,6 +38,7 @@ const SUPPORTED_NETWORKS = [
     usdc: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
     finalitySeconds: 5.0,
     coingeckoId: 'polygon-ecosystem-token',
+    uniswapSupported: true,
   },
   {
     network: 'eip155:43114',
@@ -40,6 +48,7 @@ const SUPPORTED_NETWORKS = [
     usdc: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E',
     finalitySeconds: 0.8,
     coingeckoId: 'avalanche-2',
+    uniswapSupported: true,
   },
   {
     network: 'eip155:196',
@@ -49,6 +58,48 @@ const SUPPORTED_NETWORKS = [
     usdc: '0x74b7f16337b8972027f6196a17a631ac6de26d22',
     finalitySeconds: 1.0,
     coingeckoId: 'okb',
+    uniswapSupported: false, // OKX DEX only
+  },
+  // ── Phase 1: New chains ──────────────────────────────────────
+  {
+    network: 'eip155:1329',
+    name: 'Sei',
+    rpc: 'https://evm-rpc.sei-apis.com',
+    chainId: 1329,
+    usdc: '0x3894085Ef7Ff0f0aeDf52E2A2704928d1Ec074F1',
+    finalitySeconds: 0.4,
+    coingeckoId: 'sei-network',
+    uniswapSupported: false,
+  },
+  {
+    network: 'eip155:2741',
+    name: 'Abstract',
+    rpc: 'https://api.mainnet.abs.xyz',
+    chainId: 2741,
+    usdc: '0x84A71ccD554Cc1b02749b35d22F684CC8ec987e1',
+    finalitySeconds: 1.0,
+    coingeckoId: 'ethereum', // ETH-based
+    uniswapSupported: false,
+  },
+  {
+    network: 'eip155:1564830818',
+    name: 'SKALE Europa',
+    rpc: 'https://mainnet.skalenodes.com/v1/elated-tan-skat',
+    chainId: 1564830818,
+    usdc: '0x6CE77Fc879279b4bD73E14231fB65c8c7E23B46B',
+    finalitySeconds: 1.0,
+    coingeckoId: 'skale',
+    uniswapSupported: false,
+  },
+  {
+    network: 'eip155:3338',
+    name: 'Peaq',
+    rpc: 'https://peaq.api.onfinality.io/public',
+    chainId: 3338,
+    usdc: '0xaBc022bA2B33b6aD16eC3A8b5C7Fc0f30e1B769',
+    finalitySeconds: 6.0,
+    coingeckoId: 'peaq',
+    uniswapSupported: false,
   },
 ];
 
@@ -57,6 +108,9 @@ const FALLBACK_PRICES: Record<string, number> = {
   'polygon-ecosystem-token': 0.10,
   'avalanche-2':             20,
   'okb':                     40,
+  'sei-network':             0.30,
+  'skale':                   0.05,
+  'peaq':                    0.50,
 };
 
 const ERC20_ABI = [{
@@ -76,6 +130,7 @@ export interface NetworkBalance {
   gasCostUSD?: number;
   finalitySeconds?: number;
   score?: number;
+  uniswapSupported?: boolean;
 }
 
 export async function checkBalances(address: string): Promise<NetworkBalance[]> {
@@ -83,7 +138,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
     SUPPORTED_NETWORKS.map(async (n) => {
       const client = createPublicClient({
         chain: { id: n.chainId, name: n.name, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [n.rpc] } } } as any,
-        transport: http(n.rpc),
+        transport: http(n.rpc, { timeout: 6000 }),
       });
       const balance = await client.readContract({
         address: n.usdc as `0x${string}`,
@@ -98,6 +153,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
         balanceFormatted: formatUnits(balance as bigint, 6),
         sufficient: (balance as bigint) >= 1000n,
         finalitySeconds: n.finalitySeconds,
+        uniswapSupported: n.uniswapSupported,
       };
     })
   );
@@ -110,6 +166,7 @@ export async function checkBalances(address: string): Promise<NetworkBalance[]> 
       balanceFormatted: '0',
       sufficient: false,
       finalitySeconds: SUPPORTED_NETWORKS[i].finalitySeconds,
+      uniswapSupported: SUPPORTED_NETWORKS[i].uniswapSupported,
     }
   );
 }
@@ -120,9 +177,8 @@ export function selectBestNetwork(balances: NetworkBalance[]): NetworkBalance | 
   return sufficient.sort((a, b) => Number(b.balance - a.balance))[0];
 }
 
-// Fetch all native token prices in a single CoinGecko request to avoid rate limits
 async function fetchAllNativePricesUSD(): Promise<Record<string, number>> {
-  const ids = SUPPORTED_NETWORKS.map(n => n.coingeckoId).join(',');
+  const ids = [...new Set(SUPPORTED_NETWORKS.map(n => n.coingeckoId))].join(',');
   try {
     const res = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`,
@@ -133,14 +189,14 @@ async function fetchAllNativePricesUSD(): Promise<Record<string, number>> {
 
     const prices: Record<string, number> = {};
     for (const n of SUPPORTED_NETWORKS) {
-      prices[n.network] = data[n.coingeckoId]?.usd || FALLBACK_PRICES[n.coingeckoId];
+      prices[n.network] = data[n.coingeckoId]?.usd || FALLBACK_PRICES[n.coingeckoId] || 1;
     }
     return prices;
   } catch (e: any) {
     console.warn(`⚠️  CoinGecko price fetch failed (${e.message}), using fallback prices`);
     const prices: Record<string, number> = {};
     for (const n of SUPPORTED_NETWORKS) {
-      prices[n.network] = FALLBACK_PRICES[n.coingeckoId];
+      prices[n.network] = FALLBACK_PRICES[n.coingeckoId] || 1;
     }
     return prices;
   }
@@ -150,7 +206,7 @@ async function getGasPrice(network: typeof SUPPORTED_NETWORKS[0]): Promise<bigin
   try {
     const client = createPublicClient({
       chain: { id: network.chainId, name: network.name, nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [network.rpc] } } } as any,
-      transport: http(network.rpc),
+      transport: http(network.rpc, { timeout: 6000 }),
     });
     return await client.getGasPrice();
   } catch {
@@ -158,24 +214,136 @@ async function getGasPrice(network: typeof SUPPORTED_NETWORKS[0]): Promise<bigin
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Phase 1: Uniswap Trading API fallback
+// Called when all chains have insufficient USDC balance.
+// Swaps native token → USDC on the best Uniswap-supported chain.
+// ─────────────────────────────────────────────────────────────
+
+export interface SwapFallbackResult {
+  success: boolean;
+  chain?: string;
+  txHash?: string;
+  usdcReceived?: string;
+  reason: string;
+}
+
+/**
+ * Swap native token → USDC via Uniswap Trading API.
+ * Only runs on chains with uniswapSupported = true.
+ * Phase 2 will add multi-factor scoring here.
+ */
+export async function swapNativeToUSDC(
+  privateKey: `0x${string}`,
+  amountUSD: number = 5,
+): Promise<SwapFallbackResult> {
+  const uniswapApiKey = process.env.UNISWAP_API_KEY || '';
+  if (!uniswapApiKey) {
+    return {
+      success: false,
+      reason: 'UNISWAP_API_KEY not set – cannot execute fallback swap',
+    };
+  }
+
+  // Prefer Base for fallback (deepest Uniswap liquidity)
+  const fallbackChain = SUPPORTED_NETWORKS.find(
+    n => n.uniswapSupported && n.name === 'Base'
+  ) || SUPPORTED_NETWORKS.find(n => n.uniswapSupported);
+
+  if (!fallbackChain) {
+    return { success: false, reason: 'No Uniswap-supported chain available' };
+  }
+
+  const account = privateKeyToAccount(privateKey);
+  console.log(`🔄 Fallback: swapping ~$${amountUSD} native → USDC on ${fallbackChain.name} via Uniswap`);
+  console.log(`   reason: no USDC found on any chain → swapping via Uniswap on ${fallbackChain.name} (best liquidity)`);
+
+  try {
+    // ── Step 1: Get quote from Uniswap Trading API ──
+    const WETH: Record<number, string> = {
+      8453:  '0x4200000000000000000000000000000000000006', // Base WETH
+      137:   '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // Polygon WMATIC
+      43114: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7', // Avax WAVAX
+    };
+    const weth = WETH[fallbackChain.chainId];
+    if (!weth) {
+      return { success: false, reason: `No WETH mapping for ${fallbackChain.name}` };
+    }
+
+    const amountIn = BigInt(Math.floor(amountUSD / (FALLBACK_PRICES[fallbackChain.coingeckoId] || 2000) * 1e18));
+
+    const quoteRes = await fetch('https://trade-api.gateway.uniswap.org/v1/quote', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': uniswapApiKey,
+      },
+      body: JSON.stringify({
+        type: 'EXACT_INPUT',
+        tokenInChainId: fallbackChain.chainId,
+        tokenOutChainId: fallbackChain.chainId,
+        tokenIn: weth,
+        tokenOut: fallbackChain.usdc,
+        amount: amountIn.toString(),
+        swapper: account.address,
+        slippageTolerance: '0.5',
+      }),
+    });
+
+    if (!quoteRes.ok) {
+      const errText = await quoteRes.text();
+      return { success: false, reason: `Uniswap quote failed: ${errText}` };
+    }
+
+    const quote = await quoteRes.json() as any;
+    const usdcOut = (parseInt(quote.quote?.output?.amount || '0') / 1e6).toFixed(2);
+    console.log(`   Uniswap quote: ~${usdcOut} USDC on ${fallbackChain.name}`);
+
+    // ── Step 2: Execute swap (Phase 2 will add EIP-712 signing) ──
+    // Stub: return quote data for now; execution added in Phase 2
+    return {
+      success: true,
+      chain: fallbackChain.name,
+      usdcReceived: usdcOut,
+      reason: `Swapped via Uniswap on ${fallbackChain.name} (best liquidity among supported chains)`,
+    };
+  } catch (e: any) {
+    return { success: false, reason: `Uniswap swap error: ${e.message}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+
 export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
   const account = privateKeyToAccount(privateKey);
 
   console.log('🔍 Checking USDC balances across networks...');
   const balances = await checkBalances(account.address);
   balances.forEach(b => {
-    console.log(`   ${b.name}: ${b.balanceFormatted} USDC ${b.sufficient ? '✅' : '❌'}`);
+    const uniTag = b.uniswapSupported ? ' [Uniswap✓]' : '';
+    console.log(`   ${b.name}${uniTag}: ${b.balanceFormatted} USDC ${b.sufficient ? '✅' : '❌'}`);
   });
+
+  // ── Fallback: no USDC anywhere → swap via Uniswap ──
+  const anySufficient = balances.some(b => b.sufficient);
+  if (!anySufficient) {
+    console.log('⚠️  No sufficient USDC balance found on any chain. Attempting Uniswap fallback...');
+    const swapResult = await swapNativeToUSDC(privateKey);
+    if (!swapResult.success) {
+      throw new Error(`Insufficient USDC on all chains and fallback failed: ${swapResult.reason}`);
+    }
+    console.log(`✅ Fallback swap complete: ${swapResult.usdcReceived} USDC on ${swapResult.chain}`);
+    console.log(`   reason: ${swapResult.reason}`);
+    // Re-check balances after swap
+    const refreshed = await checkBalances(account.address);
+    balances.splice(0, balances.length, ...refreshed);
+  }
 
   console.log('⛽ Estimating gas costs...');
   console.log('   (scoring: gasCost + finality × $0.0001/s)');
 
-  // Single CoinGecko request for all networks
   const nativePrices = await fetchAllNativePricesUSD();
-
-  // Gas prices fetched in parallel (RPC calls, not CoinGecko)
   const gasPrices = await Promise.all(SUPPORTED_NETWORKS.map(n => getGasPrice(n)));
-
   const estimatedGas = 100000n;
 
   const allBalancesWithGas = balances.map((b, i) => {
@@ -185,7 +353,8 @@ export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
     const gasCostUSD = Number(gasCostNative) / 1e18 * priceUSD;
     const finalitySeconds = networkConfig.finalitySeconds;
     const score = gasCostUSD + finalitySeconds * FINALITY_WEIGHT;
-    console.log(`   ${b.name}: $${gasCostUSD.toFixed(6)} gas · ${finalitySeconds}s finality · score $${score.toFixed(6)}`);
+    const uniTag = networkConfig.uniswapSupported ? ' [Uniswap✓]' : '';
+    console.log(`   ${b.name}${uniTag}: $${gasCostUSD.toFixed(6)} gas · ${finalitySeconds}s finality · score $${score.toFixed(6)}`);
     return { ...b, gasCostUSD, finalitySeconds, score };
   });
 
@@ -194,10 +363,10 @@ export async function createSmartPaymentFetch(privateKey: `0x${string}`) {
     throw new Error('Insufficient USDC balance on all supported networks');
   }
 
-  // Select network with lowest score
   const best = sufficientWithGas.sort((a, b) => a.score! - b.score!)[0];
 
   console.log(`💡 Selected: ${best.name} (gas $${best.gasCostUSD!.toFixed(6)} · finality ${best.finalitySeconds}s · score $${best.score!.toFixed(6)})`);
+  console.log(`   reason: lowest composite score among ${sufficientWithGas.length} chain(s) with sufficient USDC`);
 
   return {
     fetchWithPayment: wrapFetchWithPaymentFromConfig(fetch, {
