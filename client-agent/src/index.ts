@@ -6,44 +6,63 @@ import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
 import { ExactEvmScheme } from '@x402/evm';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createWalletClient, createPublicClient, http } from 'viem';
+import { readFileSync } from 'fs';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config();
-const XFLOW_URL = process.env.XFLOW_URL || 'http://localhost:3010';
-const SWAP_QUERY = process.env.SWAP_QUERY || 'swap 0.01 USDC to USDT0';
+
+const XFLOW_URL   = process.env.XFLOW_URL   || 'http://localhost:3010';
+const SWAP_QUERY  = process.env.SWAP_QUERY  || 'swap 0.01 USDC to USDT0';
 const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;
+const CHAIN_ID    = parseInt(process.env.CHAIN_ID || '196');
 
 if (!PRIVATE_KEY) throw new Error('PRIVATE_KEY is required');
 
+// ── Chain config from chains.json ─────────────────────────────
+interface ChainConfig {
+  name: string;
+  rpc: string;
+  nativeCurrency: { name: string; symbol: string; decimals: number };
+  explorer: string;
+}
+
+const chainsPath = path.join(__dirname, 'chains.json');
+const CHAINS: Record<string, ChainConfig> = JSON.parse(readFileSync(chainsPath, 'utf-8'));
+
+const chainConfig = CHAINS[String(CHAIN_ID)];
+if (!chainConfig) throw new Error(`Unsupported CHAIN_ID: ${CHAIN_ID}. Add it to chains.json`);
+
+const chain = {
+  id: CHAIN_ID,
+  name: chainConfig.name,
+  nativeCurrency: chainConfig.nativeCurrency,
+  rpcUrls: { default: { http: [chainConfig.rpc] } },
+};
+
 // ── explorerLink ───────────────────────────────────────────────
-function explorerLink(hash: string, chain: string): string {
-  const bases: Record<string, string> = {
-    base:      'https://basescan.org/tx/',
-    xlayer:    'https://www.oklink.com/xlayer/tx/',
-    polygon:   'https://polygonscan.com/tx/',
-    avalanche: 'https://snowtrace.io/tx/',
-  };
-  const b = bases[chain.toLowerCase()];
-  return b ? `${b}${hash}` : hash;
+const EXPLORER_BASES: Record<string, string> = {
+  xlayer:    'https://www.oklink.com/xlayer/tx/',
+  unichain:  'https://uniscan.xyz/tx/',
+  base:      'https://basescan.org/tx/',
+  polygon:   'https://polygonscan.com/tx/',
+  avalanche: 'https://snowtrace.io/tx/',
+};
+
+function explorerLink(hash: string, explorerKey: string): string {
+  const base = EXPLORER_BASES[explorerKey.toLowerCase()];
+  return base ? `${base}${hash}` : hash;
 }
 
 const account = privateKeyToAccount(PRIVATE_KEY);
 
-const xlayer = {
-  id: 196,
-  name: 'X Layer',
-  nativeCurrency: { name: 'OKB', symbol: 'OKB', decimals: 18 },
-  rpcUrls: { default: { http: ['https://rpc.xlayer.tech'] } },
-};
-
 const walletClient = createWalletClient({
-  account, chain: xlayer, transport: http('https://rpc.xlayer.tech'),
+  account, chain, transport: http(chainConfig.rpc),
 });
 const publicClient = createPublicClient({
-  chain: xlayer, transport: http('https://rpc.xlayer.tech'),
+  chain, transport: http(chainConfig.rpc),
 });
 
 console.log('\n╔════════════════════════════════════════════════════════════╗');
@@ -51,13 +70,13 @@ console.log('║           XFlow Client Agent — Swap Request               ║
 console.log('╚════════════════════════════════════════════════════════════╝');
 console.log(`\n🤖 Agent:  ${account.address}`);
 console.log(`📡 Target: ${XFLOW_URL}`);
+console.log(`⛓️  Chain:  ${chainConfig.name} (${CHAIN_ID})`);
 console.log(`📝 Query:  "${SWAP_QUERY}"\n`);
 
 console.log('════════════════════════════════════════════════════════════');
 console.log('1️⃣  Smart Payment Router');
 console.log('════════════════════════════════════════════════════════════');
 
-// Ask XFlow server to select the best network (routing logic lives server-side)
 const bestNetworkRes = await fetch(`${XFLOW_URL}/best-network?address=${account.address}`);
 if (!bestNetworkRes.ok) {
   const err = await bestNetworkRes.json() as any;
@@ -65,7 +84,6 @@ if (!bestNetworkRes.ok) {
 }
 const { selectedNetwork, allBalances } = await bestNetworkRes.json() as any;
 
-// x402 payment signing stays client-side (private key never leaves client)
 const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
   schemes: [{ network: selectedNetwork.network, client: new ExactEvmScheme(account) }],
 });
@@ -134,51 +152,13 @@ if (!quote) {
 
 console.log(`\n✅ Quote: ${quote.fromAmount} ${quote.fromToken} → ${quote.toAmount} ${quote.toToken}`);
 console.log(`   Risk: ${risk?.riskLevel} · Impact: ${quote.priceImpact}`);
-
-console.log('\n════════════════════════════════════════════════════════════');
-console.log('3️⃣  Checking allowance...');
-console.log('════════════════════════════════════════════════════════════');
-
-const fromTokenAddr = quote.fromTokenAddress as `0x${string}` | undefined;
-const spender = (quote.spender || '0x8b773d83bc66be128c60e07e17c8901f7a64f000') as `0x${string}`;
-console.log(`   Spender: ${spender}`);
-
-const allowanceAbi = [{
-  name: 'allowance', type: 'function', stateMutability: 'view',
-  inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
-  outputs: [{ type: 'uint256' }],
-}] as const;
-const approveAbi = [{
-  name: 'approve', type: 'function', stateMutability: 'nonpayable',
-  inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
-  outputs: [{ type: 'bool' }],
-}] as const;
-
-if (fromTokenAddr) {
-  const allowance = await publicClient.readContract({
-    address: fromTokenAddr, abi: allowanceAbi,
-    functionName: 'allowance', args: [account.address, spender],
-  });
-  const stablecoins = ['USDC', 'USDT', 'USDT0', 'USDG', 'DAI'];
-  const decimals = stablecoins.includes(quote.fromToken) ? 6 : 18;
-  const fromAmountRaw = BigInt(Math.floor(parseFloat(quote.fromAmount) * 10 ** decimals));
-
-  if (allowance < fromAmountRaw) {
-    console.log(`\n🔐 Approving ${quote.fromToken}...`);
-    const approveTx = await walletClient.writeContract({
-      address: fromTokenAddr, abi: approveAbi, functionName: 'approve',
-      args: [spender, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
-    });
-    console.log(`   Approve TX: ${explorerLink(approveTx, 'xlayer')}`);
-    await publicClient.waitForTransactionReceipt({ hash: approveTx });
-    console.log(`   ✅ Approved`);
-  } else {
-    console.log(`✅ Allowance sufficient`);
-  }
+if (quoteData.result?.data?.routeDecision) {
+  const rd = quoteData.result.data.routeDecision;
+  console.log(`   Route: ${rd.selected} · ${rd.reason}`);
 }
 
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('4️⃣  Fetching fresh TX data from XFlow (/tx)...');
+console.log('3️⃣  Fetching fresh TX data from XFlow (/tx)...');
 console.log('════════════════════════════════════════════════════════════');
 
 const txRes = await fetch(`${XFLOW_URL}/tx`, {
@@ -201,7 +181,49 @@ if (!freshTx) {
   console.log(JSON.stringify(txData, null, 2));
   process.exit(1);
 }
-console.log(`✅ Fresh TX ready`);
+console.log(`✅ Fresh TX ready · router: ${freshTx.to}`);
+
+console.log('\n════════════════════════════════════════════════════════════');
+console.log('4️⃣  Checking allowance...');
+console.log('════════════════════════════════════════════════════════════');
+
+const fromTokenAddr = quote.fromTokenAddress as `0x${string}` | undefined;
+const spender = freshTx.to as `0x${string}`;
+
+const allowanceAbi = [{
+  name: 'allowance', type: 'function', stateMutability: 'view',
+  inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+  outputs: [{ type: 'uint256' }],
+}] as const;
+const approveAbi = [{
+  name: 'approve', type: 'function', stateMutability: 'nonpayable',
+  inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+  outputs: [{ type: 'bool' }],
+}] as const;
+
+if (fromTokenAddr) {
+  console.log(`   Spender: ${spender}`);
+  const allowance = await publicClient.readContract({
+    address: fromTokenAddr, abi: allowanceAbi,
+    functionName: 'allowance', args: [account.address, spender],
+  });
+  const stablecoins = ['USDC', 'USDT', 'USDT0', 'USDG', 'DAI'];
+  const decimals = stablecoins.includes(quote.fromToken) ? 6 : 18;
+  const fromAmountRaw = BigInt(Math.floor(parseFloat(quote.fromAmount) * 10 ** decimals));
+
+  if (allowance < fromAmountRaw) {
+    console.log(`\n🔐 Approving ${quote.fromToken}...`);
+    const approveTx = await walletClient.writeContract({
+      address: fromTokenAddr, abi: approveAbi, functionName: 'approve',
+      args: [spender, BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')],
+    });
+    console.log(`   Approve TX: ${explorerLink(approveTx, chainConfig.explorer)}`);
+    await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    console.log(`   ✅ Approved`);
+  } else {
+    console.log(`✅ Allowance sufficient`);
+  }
+}
 
 console.log('\n════════════════════════════════════════════════════════════');
 console.log('5️⃣  Broadcasting swap TX...');
@@ -212,10 +234,10 @@ const swapHash = await walletClient.sendTransaction({
   value: BigInt(freshTx.value || '0'),
   gas: BigInt(Math.floor(Number(freshTx.gas) * 1.5)),
   gasPrice: BigInt(freshTx.gasPrice),
-  chainId: 196,
+  chainId: CHAIN_ID,
 });
 
-console.log(`\n✅ Swap TX: ${explorerLink(swapHash, 'xlayer')}`);
+console.log(`\n✅ Swap TX: ${explorerLink(swapHash, chainConfig.explorer)}`);
 
 const receipt = await publicClient.waitForTransactionReceipt({ hash: swapHash, timeout: 60_000 })
   .catch(e => { console.log(`⚠️  Receipt timeout: ${e.message}`); return null; });
@@ -225,7 +247,11 @@ if (!receipt || receipt.status === 'reverted') {
   await fetch(`${XFLOW_URL}/fail`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ txHash: swapHash, fromToken: quote.fromToken, toToken: quote.toToken, fromAmount: quote.fromAmount, paymentNetwork: swapPaymentNetwork, agentAddress: account.address }),
+    body: JSON.stringify({
+      txHash: swapHash, fromToken: quote.fromToken, toToken: quote.toToken,
+      fromAmount: quote.fromAmount, paymentNetwork: swapPaymentNetwork,
+      agentAddress: account.address,
+    }),
   }).catch(() => {});
   process.exit(1);
 }
@@ -268,6 +294,7 @@ if (confirmData.analyticsTx) {
 console.log('\n════════════════════════════════════════════════════════════');
 console.log('7️⃣  Reporting analysis receipt to XFlow...');
 console.log('════════════════════════════════════════════════════════════');
+
 await fetch(`${XFLOW_URL}/analysisReceived`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -277,8 +304,11 @@ await fetch(`${XFLOW_URL}/analysisReceived`, {
     paymentNetwork: swapPaymentNetwork,
   }),
 }).catch(e => console.warn('analysisReceived failed:', e.message));
+
 console.log(`\n💸 Client: received analysis and sending X402 payment to XFlow (/confirm)...`);
-if (confirmX402TxHash) console.log(`✅ XFlow received payment!\n   TX:${explorerLink(confirmX402TxHash, swapPaymentNetwork || 'base')}`);
+if (confirmX402TxHash) {
+  console.log(`✅ XFlow received payment!\n   TX:${explorerLink(confirmX402TxHash, swapPaymentNetwork || 'base')}`);
+}
 
 console.log('\n╔════════════════════════════════════════════════════════════╗');
 console.log('║                  ✅ Mission Complete                       ║');

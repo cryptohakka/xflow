@@ -122,9 +122,10 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
 
   let quote: any;
   let routeDecision: any = null;
+  let uniswapRawQuote: any = null;
 
   try {
-    const { quote: bestQuote, decision } = await selectBestRoute({
+    const { quote: bestQuote, decision, uniswapRawQuote: rawQ } = await selectBestRoute({
       fromToken: fromSymbol,
       toToken:   toSymbol,
       amount:    intent.amount || '1.0',
@@ -134,8 +135,9 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
       fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
       chainId: 196,
     });
-    quote = bestQuote;
-    routeDecision = decision;
+    quote           = bestQuote;
+    routeDecision   = decision;
+    uniswapRawQuote = rawQ ?? null;
     console.log(`🏆 Route: ${decision.selected} · liq $${(decision.liquidityUSD || 0).toFixed(0)} · ${decision.reason}`);
   } catch (e: any) {
     console.warn(`⚠️  selectBestRoute failed (${e.message}), falling back to OKX quote`);
@@ -207,7 +209,34 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   await new Promise(r => setTimeout(r, 1100));
 
   // Step 5: DEX Agent (generate TX data)
-  const result = await handleDexQuery(query, userAddress, quote);
+  let result: any;
+
+  if (routeDecision?.selected === 'Uniswap' && uniswapRawQuote && userAddress) {
+    console.log(`🦄 Generating Uniswap TX...`);
+    try {
+      const { getUniswapSwapTx } = await import('./dex/integrations/uniswap.js');
+      const chainId = parseInt(process.env.CHAIN_ID || '196');
+      const uniTx = await getUniswapSwapTx(chainId, uniswapRawQuote, userAddress);
+      if (uniTx) {
+        result = {
+          fromToken:  quote.fromToken,
+          toToken:    quote.toToken,
+          fromAmount: quote.fromAmount,
+          toAmount:   quote.toAmount,
+          tx: uniTx,
+          note: 'Sign and send this TX with your wallet to execute the swap via Uniswap',
+        };
+      } else {
+        console.warn('⚠️  Uniswap TX generation failed, falling back to OKX TX');
+        result = await handleDexQuery(query, userAddress, quote);
+      }
+    } catch (e: any) {
+      console.warn(`⚠️  Uniswap TX error (${e.message}), falling back to OKX TX`);
+      result = await handleDexQuery(query, userAddress, quote);
+    }
+  } else {
+    result = await handleDexQuery(query, userAddress, quote);
+  }
 
   return {
     intent,
