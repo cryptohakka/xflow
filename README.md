@@ -6,7 +6,7 @@ XFlow is to AI agents what Stripe is to web apps.
 
 XFlow is built for developers building autonomous AI agents that need to transact onchain. It's a production-deployed multi-agent system where AI agents execute DeFi swaps on X Layer and Unichain, pay for services using x402 micropayments ($0.001 USDC/call), and autonomously pay other AI agents — all without human intervention after initial setup. Every payment, swap, and agent-to-agent call is recorded onchain.
 
-**[🎬 Demo Video](https://x.com/xflow_lab/status/2036330252180279791)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)**
+**[🎬 Demo Video](https://x.com/xflow_lab/status/2036330252180279791)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)** · **[📊 Dashboard](https://xflow.a2aflow.space/dashboard.html)**
 
 ---
 
@@ -97,6 +97,8 @@ Fees collected directly to `PAYEE_ADDRESS` with no intermediary.
 ## Live Dashboard
 
 ![XFlow Dashboard](./assets/dashboard.png)
+
+**[📊 Live Dashboard](https://xflow.a2aflow.space/dashboard.html)** — real-time Route Decision Log, swap history, x402 payment stats
 
 *All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b)*
 
@@ -362,10 +364,9 @@ cd client-agent
 
 `client-agent/.env.example`:
 ```bash
-PRIVATE_KEY=0x...                    # Your wallet
-XFLOW_URL=https://xflow.a2aflow.space
-SWAP_QUERY=swap 0.01 USDC to USDT0
-CHAIN_ID=130                         # 196=X Layer, 130=Unichain (overridden by cstart.sh)
+PRIVATE_KEY=0x...                        # Your wallet
+CHAIN_ID=130                             # 196=X Layer, 130=Unichain (overridden by cstart.sh)
+SWAP_QUERY=swap 0.01 USDC to USDT0       # optional, this is the default
 ```
 
 The agent will:
