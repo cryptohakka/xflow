@@ -17,9 +17,9 @@ export interface ParsedIntent {
   userAddress?: string;
 }
 
-async function parseIntent(query: string): Promise<ParsedIntent> {
+async function parseIntent(query: string, chainId: number): Promise<ParsedIntent> {
   try {
-    const tokens = await getAvailableTokens();
+    const tokens = await getAvailableTokens(chainId);
     const tokenList = tokens.join('|');
     const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -42,7 +42,7 @@ Rules:
 
 Return: {"action":"swap"|"quote"|"unknown","fromToken":"${tokenList}"|null,"toToken":"${tokenList}"|null,"amount":"number as string"|null}
 
-Supported tokens on X Layer: ${tokenList}`,
+Supported tokens on chain ${chainId}: ${tokenList}`,
         }],
       }),
     });
@@ -57,7 +57,7 @@ Supported tokens on X Layer: ${tokenList}`,
     return {
       action: isSwap ? 'swap' : 'quote',
       fromToken: swapMatch?.[1]?.toUpperCase() || 'USDC',
-      toToken: swapMatch?.[2]?.toUpperCase() || 'WOKB',
+      toToken: swapMatch?.[2]?.toUpperCase() || 'WETH',
       amount: amountMatch?.[0] || '1.0',
     };
   }
@@ -71,6 +71,9 @@ export interface OrchestratorOptions {
   fromTokenAddress?: string;
   toTokenAddress?: string;
   quoteOnly?: boolean;
+  chainId?: number;
+  permit2Signature?: string;
+  uniswapRawQuote?: any; // pass from /swap to skip re-fetching
 }
 
 export async function orchestrate(query: string, options: OrchestratorOptions) {
@@ -80,22 +83,25 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     fromTokenAddress,
     toTokenAddress,
     quoteOnly = false,
+    chainId = 196,
+    permit2Signature,
+    uniswapRawQuote: passedRawQuote,
   } = options;
 
   // Step 1: Parse intent
-  console.log(`🧠 Orchestrator parsing intent...`);
-  const intent = options.parsedIntent || await parseIntent(query);
+  console.log(`🧠 Orchestrator parsing intent... (chain ${chainId})`);
+  const intent = options.parsedIntent || await parseIntent(query, chainId);
   console.log(`   Parsed:`, JSON.stringify(intent));
 
   if (intent.action === 'unknown') {
     return { intent, network: preferredNetwork, transaction: '', data: { status: 'unrecognized intent' } };
   }
 
-  // Step 2: Resolve token addresses
-  const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC');
-  const toResolved   = await resolveToken(toTokenAddress   || intent.toToken   || 'WOKB');
+  // Step 2: Resolve token addresses (chain-aware)
+  const fromResolved = await resolveToken(fromTokenAddress || intent.fromToken || 'USDC', chainId);
+  const toResolved   = await resolveToken(toTokenAddress   || intent.toToken   || 'WETH', chainId);
   const fromSymbol = fromTokenAddress?.length ? (fromResolved.symbol || 'TOKEN') : (intent.fromToken || 'USDC');
-  const toSymbol   = toTokenAddress?.length   ? (toResolved.symbol   || 'TOKEN') : (intent.toToken   || 'WOKB');
+  const toSymbol   = toTokenAddress?.length   ? (toResolved.symbol   || 'TOKEN') : (intent.toToken   || 'WETH');
 
   console.log(`🔍 Tokens: ${fromSymbol}(${fromResolved.address?.slice(0,8)}...) → ${toSymbol}(${toResolved.address?.slice(0,8)}...)`);
 
@@ -103,12 +109,12 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     const missing = [];
     if (!fromResolved.address) missing.push(fromSymbol);
     if (!toResolved.address)   missing.push(toSymbol);
-    const available = await getAvailableTokens();
+    const available = await getAvailableTokens(chainId);
     return {
       intent, network: preferredNetwork, transaction: '',
       data: {
         status: 'token_not_found',
-        message: `Token(s) not found on X Layer: ${missing.join(', ')}`,
+        message: `Token(s) not found on chain ${chainId}: ${missing.join(', ')}`,
         suggestion: 'Please provide tokenContractAddress or use availableTokens',
         availableTokens: available,
       },
@@ -118,38 +124,66 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
   console.log(`🔍 Resolved: ${fromSymbol}=${fromResolved.source}(${fromResolved.address?.slice(0,8)}), ${toSymbol}=${toResolved.source}(${toResolved.address?.slice(0,8)})`);
 
   // Step 3: Quote + route decision
-  console.log(`📊 Getting quote + route decision... ${fromSymbol} → ${toSymbol}`);
-
   let quote: any;
   let routeDecision: any = null;
-  let uniswapRawQuote: any = null;
+  let uniswapRawQuote: any = passedRawQuote ?? null;
 
-  try {
-    const { quote: bestQuote, decision, uniswapRawQuote: rawQ } = await selectBestRoute({
-      fromToken: fromSymbol,
-      toToken:   toSymbol,
-      amount:    intent.amount || '1.0',
-      userAddress: userAddress || '0x0000000000000000000000000000000000000001',
-      fromTokenAddress: fromResolved.address || undefined,
-      toTokenAddress:   toResolved.address   || undefined,
-      fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
-      chainId: 196,
-    });
-    quote           = bestQuote;
-    routeDecision   = decision;
-    uniswapRawQuote = rawQ ?? null;
-    console.log(`🏆 Route: ${decision.selected} · liq $${(decision.liquidityUSD || 0).toFixed(0)} · ${decision.reason}`);
-  } catch (e: any) {
-    console.warn(`⚠️  selectBestRoute failed (${e.message}), falling back to OKX quote`);
-    quote = await getSwapQuote({
-      fromToken: fromSymbol,
-      toToken:   toSymbol,
-      amount:    intent.amount || '1.0',
-      userAddress: userAddress || '0x0000000000000000000000000000000000000001',
-      fromTokenAddress: fromResolved.address || undefined,
-      toTokenAddress:   toResolved.address   || undefined,
-      fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
-    });
+  if (passedRawQuote) {
+    // rawQuote passed from /swap — skip re-fetching, reconstruct quote/decision
+    console.log(`♻️  Reusing rawQuote from /swap (chain ${chainId})`);
+    const toAmount = parseInt(passedRawQuote?.quote?.output?.amount || '0') / 1e6;
+    const rawImpact = parseFloat(passedRawQuote?.quote?.priceImpact || '0');
+    quote = {
+      fromToken:        fromSymbol,
+      toToken:          toSymbol,
+      fromAmount:       intent.amount || '1.0',
+      toAmount:         toAmount.toFixed(6),
+      route:            'Uniswap V3',
+      priceImpact:      `${(rawImpact * 100).toFixed(4)}%`,
+      estimateGasFee:   '0',
+      isHoneyPot:       false,
+      taxRate:          '0',
+      toTokenUnitPrice: '0',
+      fromTokenAddress: fromResolved.address,
+      toTokenAddress:   toResolved.address,
+      chainId,
+    };
+    routeDecision = {
+      selected: 'Uniswap',
+      okx: null,
+      uniswap: { route: 'Uniswap', toAmount, totalScore: 1, reason: 'rawQuote reused' },
+      reason: 'rawQuote reused from /swap',
+    };
+  } else {
+    console.log(`📊 Getting quote + route decision... ${fromSymbol} → ${toSymbol} (chain ${chainId})`);
+    try {
+      const { quote: bestQuote, decision, uniswapRawQuote: rawQ } = await selectBestRoute({
+        fromToken: fromSymbol,
+        toToken:   toSymbol,
+        amount:    intent.amount || '1.0',
+        userAddress: userAddress || '0x0000000000000000000000000000000000000001',
+        fromTokenAddress: fromResolved.address || undefined,
+        toTokenAddress:   toResolved.address   || undefined,
+        fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
+        chainId,
+      });
+      quote           = bestQuote;
+      routeDecision   = decision;
+      uniswapRawQuote = rawQ ?? null;
+      console.log(`🏆 Route: ${decision.selected} · liq $${(decision.liquidityUSD || 0).toFixed(0)} · ${decision.reason}`);
+    } catch (e: any) {
+      console.warn(`⚠️  selectBestRoute failed (${e.message}), falling back to OKX quote`);
+      quote = await getSwapQuote({
+        fromToken: fromSymbol,
+        toToken:   toSymbol,
+        amount:    intent.amount || '1.0',
+        userAddress: userAddress || '0x0000000000000000000000000000000000000001',
+        fromTokenAddress: fromResolved.address || undefined,
+        toTokenAddress:   toResolved.address   || undefined,
+        fromTokenSymbol:  fromResolved.symbol  || fromSymbol,
+        chainId,
+      });
+    }
   }
 
   // Step 4: Risk Agent
@@ -186,7 +220,6 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  // quoteOnly: skip TX generation
   if (quoteOnly) {
     console.log(`✅ Quote+Risk approved · skipping TX generation (quoteOnly mode)`);
     return {
@@ -198,6 +231,8 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
         risk,
         quote,
         routeDecision,
+        permitData:      uniswapRawQuote?.permitData ?? null,
+        uniswapRawQuote: uniswapRawQuote ?? null,
         result: null,
         confirmEndpoint: '/confirm',
         txEndpoint: '/tx',
@@ -205,18 +240,16 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  // Rate limit: 1 req/sec
   await new Promise(r => setTimeout(r, 1100));
 
   // Step 5: DEX Agent (generate TX data)
   let result: any;
 
   if (routeDecision?.selected === 'Uniswap' && uniswapRawQuote && userAddress) {
-    console.log(`🦄 Generating Uniswap TX...`);
+    console.log(`🦄 Generating Uniswap TX... (signature: ${permit2Signature ? 'provided' : 'none'})`);
     try {
       const { getUniswapSwapTx } = await import('./dex/integrations/uniswap.js');
-      const chainId = parseInt(process.env.CHAIN_ID || '196');
-      const uniTx = await getUniswapSwapTx(chainId, uniswapRawQuote, userAddress);
+      const uniTx = await getUniswapSwapTx(chainId, uniswapRawQuote, userAddress, permit2Signature);
       if (uniTx) {
         result = {
           fromToken:  quote.fromToken,

@@ -21,7 +21,6 @@ const CHAIN_ID    = parseInt(process.env.CHAIN_ID || '196');
 
 if (!PRIVATE_KEY) throw new Error('PRIVATE_KEY is required');
 
-// ── Chain config from chains.json ─────────────────────────────
 interface ChainConfig {
   name: string;
   rpc: string;
@@ -42,7 +41,6 @@ const chain = {
   rpcUrls: { default: { http: [chainConfig.rpc] } },
 };
 
-// ── explorerLink ───────────────────────────────────────────────
 const EXPLORER_BASES: Record<string, string> = {
   xlayer:    'https://www.oklink.com/xlayer/tx/',
   unichain:  'https://uniscan.xyz/tx/',
@@ -100,6 +98,7 @@ const swapRes = await fetchWithPayment(`${XFLOW_URL}/swap`, {
   body: JSON.stringify({
     query: SWAP_QUERY,
     userAddress: account.address,
+    chainId: CHAIN_ID,
     _routerMeta: {
       selectedNetwork: selectedNetwork.name,
       selectedScore: selectedNetwork.score,
@@ -141,8 +140,11 @@ if (quoteData.result?.data?.status === 'rejected') {
   process.exit(1);
 }
 
-const quote = quoteData.result?.data?.quote;
-const risk  = quoteData.result?.data?.risk;
+const quote          = quoteData.result?.data?.quote;
+const risk           = quoteData.result?.data?.risk;
+const permitData     = quoteData.result?.data?.permitData ?? null;
+const uniswapRawQuote = quoteData.result?.data?.uniswapRawQuote ?? null;
+console.log("uniswapRawQuote received:", !!uniswapRawQuote);
 
 if (!quote) {
   console.log('\n❌ No quote data');
@@ -157,8 +159,29 @@ if (quoteData.result?.data?.routeDecision) {
   console.log(`   Route: ${rd.selected} · ${rd.reason}`);
 }
 
+// ── Permit2 signing (Uniswap only) ────────────────────────────
+let permit2Signature: string | undefined;
+if (permitData) {
+  console.log('\n════════════════════════════════════════════════════════════');
+  console.log('3️⃣  Signing Permit2...');
+  console.log('════════════════════════════════════════════════════════════');
+  try {
+    permit2Signature = await walletClient.signTypedData({
+      domain:      permitData.domain,
+      types:       permitData.types,
+      primaryType: 'PermitSingle',
+      message:     permitData.values,
+    });
+    console.log(`✅ Permit2 signed`);
+  } catch (e: any) {
+    console.warn(`⚠️  Permit2 signing failed: ${e.message}`);
+  }
+}
+
+const step = (n: number) => ['', '1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'][permitData ? n : n - 1] || `${n}.`;
+
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('3️⃣  Fetching fresh TX data from XFlow (/tx)...');
+console.log(`${step(4)}  Fetching fresh TX data from XFlow (/tx)...`);
 console.log('════════════════════════════════════════════════════════════');
 
 const txRes = await fetch(`${XFLOW_URL}/tx`, {
@@ -167,9 +190,12 @@ const txRes = await fetch(`${XFLOW_URL}/tx`, {
   body: JSON.stringify({
     query: SWAP_QUERY,
     userAddress: account.address,
+    chainId: CHAIN_ID,
     fromTokenAddress: quote.fromTokenAddress,
     toTokenAddress: quote.toTokenAddress,
     parsedIntent: quoteData.intent,
+    permit2Signature,
+    uniswapRawQuote,  // pass rawQuote to avoid re-fetching
   }),
 });
 
@@ -184,11 +210,12 @@ if (!freshTx) {
 console.log(`✅ Fresh TX ready · router: ${freshTx.to}`);
 
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('4️⃣  Checking allowance...');
+console.log(`${step(5)}  Checking allowance...`);
 console.log('════════════════════════════════════════════════════════════');
 
 const fromTokenAddr = quote.fromTokenAddress as `0x${string}` | undefined;
-const spender = freshTx.to as `0x${string}`;
+const PERMIT2_ADDRESS = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+const spender = permitData ? PERMIT2_ADDRESS as `0x${string}` : freshTx.to as `0x${string}`;
 
 const allowanceAbi = [{
   name: 'allowance', type: 'function', stateMutability: 'view',
@@ -226,14 +253,14 @@ if (fromTokenAddr) {
 }
 
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('5️⃣  Broadcasting swap TX...');
+console.log(`${step(6)}  Broadcasting swap TX...`);
 console.log('════════════════════════════════════════════════════════════');
 
 const swapHash = await walletClient.sendTransaction({
   to: freshTx.to, data: freshTx.data,
   value: BigInt(freshTx.value || '0'),
   gas: BigInt(Math.floor(Number(freshTx.gas) * 1.5)),
-  gasPrice: BigInt(freshTx.gasPrice),
+  gasPrice: freshTx.gasPrice ? BigInt(freshTx.gasPrice) : undefined,
   chainId: CHAIN_ID,
 });
 
@@ -258,7 +285,7 @@ if (!receipt || receipt.status === 'reverted') {
 console.log('📋 Proceeding to confirm...');
 
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('6️⃣  Confirming swap to XFlow (/confirm)...');
+console.log(`${step(7)}  Confirming swap to XFlow (/confirm)...`);
 console.log('════════════════════════════════════════════════════════════');
 
 const confirmFetch = wrapFetchWithPaymentFromConfig(fetch, {
@@ -292,7 +319,7 @@ if (confirmData.analyticsTx) {
 }
 
 console.log('\n════════════════════════════════════════════════════════════');
-console.log('7️⃣  Reporting analysis receipt to XFlow...');
+console.log(`${step(8)}  Reporting analysis receipt to XFlow...`);
 console.log('════════════════════════════════════════════════════════════');
 
 await fetch(`${XFLOW_URL}/analysisReceived`, {

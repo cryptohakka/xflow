@@ -7,10 +7,9 @@ export interface RiskInput {
   fromToken: string;
   toToken: string;
   amount: string;
-  priceImpact?: string;         // Optional — if missing, swap is rejected as UNKNOWN
+  priceImpact?: string;
   estimateGasFee: string;
   route: string;
-  // OKX API honeypot/tax data
   isHoneyPot?: boolean;
   taxRate?: string;
   toTokenUnitPrice?: string;
@@ -29,13 +28,11 @@ export interface RiskResult {
     honeypot: boolean;
     taxRate: string;
     educationNote?: string;
-    driver?: string;            // Which factor drove the final risk level
+    driver?: string;
     scores: { impact: number; route: number };
   };
 }
 
-// Price impact: 5-level scoring (0–4)
-// Negative impact = favorable slippage → no risk
 function scorePriceImpact(impact: number): number {
   if (impact <= 0)   return 0;
   if (impact < 0.1)  return 0;
@@ -46,12 +43,11 @@ function scorePriceImpact(impact: number): number {
 }
 
 // Route quality: binary scoring (0 or 2)
-// OKX aggregator only returns verified DEXes, so any named route = verified.
-// Unknown = API failed to find a route. Reserved for future multi-chain expansion
-// where non-OKX routes may appear and require tiered evaluation.
+// Uniswap Trading API and OKX aggregator routes are both verified
 function scoreRoute(route: string): number {
   if (!route || route === 'Unknown') return 2;
-  return 0; // OKX aggregator verified
+  if (/uniswap/i.test(route)) return 0;  // Uniswap Trading API = verified
+  return 0; // OKX aggregator = verified
 }
 
 function riskLevelFromScore(score: number): 'LOW' | 'MEDIUM' | 'HIGH' {
@@ -65,7 +61,7 @@ export function evaluateRisk(input: RiskInput): RiskResult {
   const suggestions: string[] = [];
   let safeAmount: string | undefined;
 
-  // 1. Honeypot check (immediate reject, bypasses scoring)
+  // 1. Honeypot check
   const isHoneyPot = input.isHoneyPot || false;
   if (isHoneyPot) {
     reasons.push('⚠️ Token flagged as potential honeypot');
@@ -87,7 +83,7 @@ export function evaluateRisk(input: RiskInput): RiskResult {
     };
   }
 
-  // 2. Tax rate check (additive warning, not part of core score)
+  // 2. Tax rate check
   const taxRate = parseFloat(input.taxRate || '0');
   if (taxRate >= 10) {
     reasons.push(`High tax rate: ${taxRate}%`);
@@ -97,7 +93,7 @@ export function evaluateRisk(input: RiskInput): RiskResult {
     suggestions.push(`Token has ${taxRate}% tax — factor this into your expected output`);
   }
 
-  // 3. Price impact — UNKNOWN guard
+  // 3. Price impact guard
   if (!input.priceImpact) {
     return {
       approved: false,
@@ -115,21 +111,18 @@ export function evaluateRisk(input: RiskInput): RiskResult {
     };
   }
 
-  const impact = Math.abs(parseFloat(input.priceImpact.replace('%', '')));
+  const rawImpact = parseFloat(input.priceImpact.replace('%', ''));
+  const impact = rawImpact < 0 ? 0 : rawImpact; // negative = favorable slippage → no risk
   const impactScore = scorePriceImpact(impact);
   const routeScore  = scoreRoute(input.route);
 
-  // Core risk score = max(impactScore, routeScore)
   const riskScore = Math.max(impactScore, routeScore);
   const driver    = impactScore >= routeScore ? 'price impact' : 'route quality';
-
   const riskLevel = riskLevelFromScore(riskScore);
 
-  // Reason lines
   reasons.push(`Price impact: ${input.priceImpact} → score ${impactScore}`);
   reasons.push(`Route quality: ${input.route} → score ${routeScore}`);
 
-  // Suggestions based on impact
   if (impact > 2.0) {
     const amount = parseFloat(input.amount);
     const safeAmt = Math.floor(amount * (2.0 / impact));
@@ -143,7 +136,6 @@ export function evaluateRisk(input: RiskInput): RiskResult {
     suggestions.push('No verified route found — try a different token pair');
   }
 
-  // Gas fee check (informational only)
   const gasFee = parseInt(input.estimateGasFee);
   if (gasFee > 1_000_000) {
     suggestions.push('Gas costs are high — consider waiting for lower network congestion');

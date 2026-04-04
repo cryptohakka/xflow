@@ -3,7 +3,8 @@
  */
 import { createHmac } from 'crypto';
 import { readFileSync } from 'fs';
-import { SwapRequest, CHAIN_INDEX, TOKENS, OKX_ROUTER_XLAYER, STABLECOINS } from '../types';
+import { SwapRequest, TOKENS, OKX_ROUTER_XLAYER, STABLECOINS } from '../types';
+import { CHAIN_INDEX } from '../../tokenResolver';
 
 function loadEnv(): Record<string, string> {
   try {
@@ -39,9 +40,16 @@ const ADDR_TO_SYMBOL: Record<string, string> = {
   '0xe538905cf8410324e03a5a23c1c177a474d59b2b': 'WOKB',
   '0x5a77f1443d16ee5761d310e38b62f77f726bc71c': 'WETH',
   '0x1e4a5963abfd975d8c9021ce480b42188849d41d': 'USDT',
+  '0x078d782b760474a361dda0af3839290b0ef57ad6': 'USDC',
+  '0x4200000000000000000000000000000000000006': 'WETH',
+  '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913': 'USDC',
+  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'USDC',
+  '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e': 'USDC',
 };
 
 export async function getSwapQuote(req: SwapRequest) {
+  const chainId  = req.chainId ?? 196;
+  const chainIdx = CHAIN_INDEX[chainId] || '196';
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken || '').toUpperCase()] || req.fromToken || '';
   const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken   || '').toUpperCase()] || req.toToken   || '';
 
@@ -49,7 +57,7 @@ export async function getSwapQuote(req: SwapRequest) {
   const decimals = STABLECOINS.includes(fromSym) ? 6 : 18;
   const amountRaw = (Math.floor(parseFloat(req.amount) * 10 ** decimals) + Math.floor(Math.random() * 3)).toString();
 
-  const query = `chainIndex=${CHAIN_INDEX}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}`;
+  const query = `chainIndex=${chainIdx}&amount=${amountRaw}&fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}`;
   const path  = `/api/v6/dex/aggregator/quote?${query}`;
   const controller = new AbortController();
   setTimeout(() => controller.abort(), 8000);
@@ -76,10 +84,13 @@ export async function getSwapQuote(req: SwapRequest) {
     fromTokenAddress: fromAddr,
     toTokenAddress:   toAddr,
     spender: OKX_ROUTER_XLAYER,
+    chainId,
   };
 }
 
 export async function getSwapTxData(req: SwapRequest) {
+  const chainId  = req.chainId ?? 196;
+  const chainIdx = CHAIN_INDEX[chainId] || '196';
   const fromAddr = req.fromTokenAddress || TOKENS[(req.fromToken || '').toUpperCase()] || req.fromToken || '';
   const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken   || '').toUpperCase()] || req.toToken   || '';
 
@@ -88,7 +99,7 @@ export async function getSwapTxData(req: SwapRequest) {
   const slippage  = (parseFloat(req.slippage || '1.0') + Math.random() * 0.1).toFixed(4);
 
   const params = new URLSearchParams({
-    chainIndex:        CHAIN_INDEX,
+    chainIndex:        chainIdx,
     amount:            amountRaw,
     userWalletAddress: req.userAddress,
     slippagePercent:   slippage,
@@ -117,8 +128,8 @@ export async function getSwapTxData(req: SwapRequest) {
       value:    tx.value,
       gas:      tx.gas,
       gasPrice: tx.gasPrice,
-      chainId:  196,
+      chainId,
     },
-    note: 'Sign and send this TX with your wallet to execute the swap on X Layer',
+    note: 'Sign and send this TX with your wallet to execute the swap',
   };
 }

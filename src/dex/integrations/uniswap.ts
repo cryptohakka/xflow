@@ -57,7 +57,8 @@ export async function getUniswapPoolLiquidity(
 export interface UniswapQuoteResult {
   toAmount: number;
   gasUSD: number;
-  rawQuote: any; // full API response, needed for /v1/swap
+  priceImpact: string;
+  rawQuote: any;
 }
 
 export async function getUniswapQuote(
@@ -71,31 +72,46 @@ export async function getUniswapQuote(
   if (!apiKey || !UNISWAP_SUPPORTED_CHAINS[chainId]) return null;
 
   try {
+    const body = {
+      type: 'EXACT_INPUT',
+      tokenInChainId:  chainId,
+      tokenOutChainId: chainId,
+      tokenIn,
+      tokenOut,
+      amount: amountIn,
+      swapper: swapper || '0x0000000000000000000000000000000000000001',
+      slippageTolerance: 0.5,
+    };
+    console.log(`[Uniswap /v1/quote] chain=${chainId} tokenIn=${tokenIn} tokenOut=${tokenOut} amount=${amountIn}`);
+
     const res = await fetch('https://trade-api.gateway.uniswap.org/v1/quote', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
       },
-      body: JSON.stringify({
-        type: 'EXACT_INPUT',
-        tokenInChainId:  chainId,
-        tokenOutChainId: chainId,
-        tokenIn,
-        tokenOut,
-        amount: amountIn,
-        swapper: swapper || '0x0000000000000000000000000000000000000001',
-        slippageTolerance: '0.5',
-      }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const err = await res.text();
+      console.warn(`[Uniswap /v1/quote] ${res.status}: ${err}`);
+      return null;
+    }
+
     const data     = await res.json() as any;
     const toAmount = parseInt(data?.quote?.output?.amount || '0') / 1e6;
     const gasUSD   = parseFloat(data?.quote?.gasFeeUSD || '0');
-    return { toAmount, gasUSD, rawQuote: data };
-  } catch {
+    const rawImpact = parseFloat(data?.quote?.priceImpact || '0');
+    const priceImpact = `${(rawImpact * 100).toFixed(4)}%`;
+
+    console.log(`[Uniswap /v1/quote] toAmount=${toAmount} gasUSD=${gasUSD} priceImpact=${priceImpact}`);
+    console.log('[Uniswap rawQuote keys]', JSON.stringify(Object.keys(data)));
+    console.log('[Uniswap permitData]', JSON.stringify(data.permitData).slice(0, 200));
+    return { toAmount, gasUSD, priceImpact, rawQuote: data };
+  } catch (e: any) {
+    console.warn(`[Uniswap /v1/quote] error: ${e.message}`);
     return null;
   }
 }
@@ -109,11 +125,6 @@ export interface UniswapSwapTxResult {
   chainId: number;
 }
 
-/**
- * Get executable TX from Uniswap Trading API /v1/swap.
- * Pass rawQuote from getUniswapQuote.
- * If permitData is present in rawQuote, sign it first and pass the signature.
- */
 export async function getUniswapSwapTx(
   chainId: number,
   rawQuote: any,
@@ -126,7 +137,7 @@ export async function getUniswapSwapTx(
   const classicQuote = rawQuote?.quote;
   if (!classicQuote) return null;
 
-  const body: Record<string, any> = { classicQuote };
+  const body: Record<string, any> = { quote: classicQuote };
 
   const permitData = rawQuote?.permitData;
   if (permitData && signature) {

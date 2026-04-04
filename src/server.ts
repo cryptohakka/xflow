@@ -17,7 +17,7 @@ import { orchestrate } from './orchestrator.js';
 import { checkBalances } from './smartPaymentRouter.js';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.static(join(__dirname, 'public')));
 
 // ── Decision Latency tracker ──────────────────────────────────
@@ -307,7 +307,6 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
     const { getDashboardData } = await import('./analyticsAgent.js');
     const data = await getDashboardData();
 
-    // Merge routeDecision into recentSwaps by token pair + timestamp proximity
     const swapsWithDecision = (data.recentSwaps || []).map((s: any) => {
       const match = recentRouteDecisions.find(d =>
         d.fromToken === s.fromToken &&
@@ -331,7 +330,8 @@ app.get('/dashboard', async (_req: Request, res: Response) => {
 
 // ── POST /swap  (x402 protected) ──────────────────────────────
 app.post('/swap', async (req: Request, res: Response) => {
-  const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta } = req.body;
+  const { query, userAddress, fromTokenAddress, toTokenAddress, _routerMeta, chainId } = req.body;
+  const swapChainId = parseInt(chainId || '196');
 
   if (!query) return res.status(400).json({ error: 'query is required' });
 
@@ -348,9 +348,10 @@ app.post('/swap', async (req: Request, res: Response) => {
     console.log(`💡 Selected: ${_routerMeta.selectedNetwork} · score $${Number(_routerMeta.selectedScore).toFixed(6)}`);
   }
   console.log(`✅ XFlow got paid ($0.001 USDC)`);
+  console.log(`⛓️  Swap chain: ${swapChainId}`);
   console.log('════════════════════════════════════════════════════════════\n');
 
-  console.log('2️⃣  Quote + Risk Assessment (X Layer)');
+  console.log('2️⃣  Quote + Risk Assessment');
   console.log('════════════════════════════════════════════════════════════');
 
   try {
@@ -363,6 +364,7 @@ app.post('/swap', async (req: Request, res: Response) => {
       fromTokenAddress,
       toTokenAddress,
       quoteOnly: true,
+      chainId: swapChainId,
     });
     const decisionMs = Math.round(performance.now() - t0);
     recordLatency(decisionMs);
@@ -372,7 +374,6 @@ app.post('/swap', async (req: Request, res: Response) => {
       console.log(`⛽ Gas saved this tx: $${(Math.max(..._routerMeta.allBalances.map((b:any)=>b.gasCostUSD||0)) - _routerMeta.selectedGasCostUSD).toFixed(6)} · total saved: $${totalGasSavedUSD.toFixed(6)}`);
     }
 
-    // Record routeDecision for dashboard
     if (result?.data?.routeDecision) {
       recordRouteDecision({
         timestamp:    new Date().toISOString(),
@@ -384,8 +385,9 @@ app.post('/swap', async (req: Request, res: Response) => {
     }
 
     console.log(`⚡ Decision latency: ${decisionMs}ms`);
-    res.json({ success: true, result, intent: result.intent, decisionMs });
-  } catch (e: any) {
+    res.json({ success: true, result, intent: result.intent, decisionMs,
+      permitData: result?.data?.permitData ?? null });  
+ } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });
@@ -414,13 +416,14 @@ app.post('/analysisReceived', async (req: Request, res: Response) => {
 
 // ── POST /tx  (no x402) ───────────────────────────────────────
 app.post('/tx', async (req: Request, res: Response) => {
-  const { query, userAddress, fromTokenAddress, toTokenAddress, parsedIntent } = req.body;
+  const { query, userAddress, fromTokenAddress, toTokenAddress, parsedIntent, chainId, permit2Signature } = req.body;
+  const txChainId = parseInt(chainId || '196');
 
   if (!query) return res.status(400).json({ error: 'query is required' });
 
   console.log('\n════════════════════════════════════════════════════════════');
   console.log('🔄 Fresh TX data requested');
-  console.log(`   query: "${query}"`);
+  console.log(`   query: "${query}" · chain: ${txChainId}`);
   console.log('════════════════════════════════════════════════════════════');
 
   try {
@@ -433,6 +436,9 @@ app.post('/tx', async (req: Request, res: Response) => {
       toTokenAddress,
       quoteOnly: false,
       parsedIntent,
+      chainId: txChainId,
+      permit2Signature,
+      uniswapRawQuote: req.body.uniswapRawQuote ?? undefined,
     });
 
     const tx = result?.data?.result?.tx;
