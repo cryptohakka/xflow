@@ -1,0 +1,29 @@
+{
+  "name": "@xflow/sdk",
+  "version": "0.1.0",
+  "description": "XFlow SDK — DeFi swaps for AI agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@x402/fetch": "*",
+    "@x402/evm": "*",
+    "viem": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ]
+}
