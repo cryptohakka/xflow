@@ -119,7 +119,6 @@ export async function analyzeSwapWithClawdMint(
     feePaid:        '0.001',
     paymentNetwork: 'base',
   }).catch((e: any) => console.warn('[ClawdMint] A2A record failed:', e.message));
-  console.log(`════════════════════════════════════════════════════════════`);
 
   return {
     txExplanation,

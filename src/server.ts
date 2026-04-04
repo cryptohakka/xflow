@@ -234,7 +234,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
     console.log(`\n${'─'.repeat(55)}`);
     console.log(`✅ Swap complete`);
     console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
-    console.log(`   TX:   ${txHash}`);
+    console.log(`   TX: ${txHash}`);
     console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`);
     console.log(`${'─'.repeat(55)}`);
 
@@ -261,15 +261,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
         paymentTxHash:  swapX402TxHash,
       }).catch((e: any) => console.warn('[Confirm] swap X402 record failed:', e.message));
     }
-    if (confirmX402TxHash) {
-      await recordX402PaymentOnchain({
-        agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
-        endpoint:       '/confirm',
-        feePaid:        '0.001',
-        paymentNetwork: paymentNetwork || 'unknown',
-        paymentTxHash:  confirmX402TxHash,
-      }).catch((e: any) => console.warn('[Confirm] confirm X402 record failed:', e.message));
-    }
+
 
     let clawdmint = null;
     try {
@@ -294,7 +286,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
       console.warn('[Confirm] ClawdMint analysis failed:', e.message);
     }
 
-    console.log(`\n🤖 XFlow → Client: Result of ClawdMint analysis`);
+
     res.json({ success: true, analyticsTx, clawdmint });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
@@ -397,8 +389,11 @@ app.post('/analysisReceived', async (req: Request, res: Response) => {
   try {
     const { agentAddress, confirmX402TxHash, paymentNetwork } = req.body;
     const { recordX402PaymentOnchain } = await import('./analyticsAgent.js');
+    console.log('\n════════════════════════════════════════════════════════════');
+    console.log('4️⃣  Confirm + Analytics');
+    console.log('════════════════════════════════════════════════════════════\n');
     console.log(`✅ XFlow received payment!`);
-    if (confirmX402TxHash) console.log(`   TX:${explorerLink(confirmX402TxHash, paymentNetwork || 'base')}`);
+    if (confirmX402TxHash) console.log(`   TX: ${explorerLink(confirmX402TxHash, paymentNetwork || 'base')}`);
     if (confirmX402TxHash) {
       await recordX402PaymentOnchain({
         agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',

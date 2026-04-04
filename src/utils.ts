@@ -4,7 +4,7 @@
 
 const EXPLORER_BASES: Record<string, string> = {
   base:      'https://basescan.org/tx/',
-  xlayer:    'https://www.oklink.com/xlayer/tx/',
+  xlayer:    'https://www.okx.com/web3/explorer/xlayer/tx/',
   polygon:   'https://polygonscan.com/tx/',
   avalanche: 'https://snowtrace.io/tx/',
 };

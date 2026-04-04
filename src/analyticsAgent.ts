@@ -102,7 +102,7 @@ export async function recordA2ACallOnchain(input: A2ACallInput): Promise<string>
     args: [input.callerAgent as `0x${string}`, input.externalAgent, input.purpose, feePaidRaw, input.paymentNetwork],
   });
   console.log(`✅ A2A call recorded!
-   TX:${explorerLink(hash, 'xlayer')}`);
+   TX: ${explorerLink(hash, 'xlayer')}`);
   return hash;
 }
 
@@ -130,7 +130,7 @@ export async function recordX402PaymentOnchain(input: X402PaymentInput): Promise
     args: [input.agentAddress as `0x${string}`, input.endpoint, feePaidRaw, input.paymentNetwork, input.paymentTxHash],
   });
   console.log(`✅ X402 payment recorded!
-   TX:${explorerLink(hash, 'xlayer')}`);
+   TX: ${explorerLink(hash, 'xlayer')}`);
   return hash;
 }
 
