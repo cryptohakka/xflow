@@ -246,34 +246,166 @@ External Agent / User
 ## Source Structure
 
 ```
-src/
-├── server.ts               # Express server — /best-network, /swap, /tx, /confirm, /dashboard
-├── smartPaymentRouter.ts   # Chain selection: score = gasCost + finality × $0.0001/s
-├── orchestrator.ts         # LLM intent parsing (Gemini 2.5 Flash Lite)
-├── riskAgent.ts            # Risk evaluation — price impact + route quality
-├── tokenResolver.ts        # Token address resolution (per-chain)
-├── analyticsAgent.ts       # Onchain swap + x402 + A2A recording
-├── clawdmintA2A.ts         # A2A + x402 call to external agent (agent0-sdk)
-├── dex/
-│   ├── types.ts            # Shared DEX types
-│   ├── scoring.ts          # Multi-factor route scoring (price/liquidity/gas/reliability)
-│   ├── liquidity.ts        # Uniswap V3 pool liquidity checks
-│   ├── integrations/
-│   │   ├── okx.ts          # OKX DEX Aggregator — quote + TX data
-│   │   └── uniswap.ts      # Uniswap Trading API — quote + Permit2 TX
-├── contracts/
-│   └── XFlowAnalytics.sol  # Analytics contract (deployed · X Layer)
-└── public/
-    └── dashboard.html      # Real-time dashboard with Route Decision Log
-
-client-agent/
+xflow/
 ├── src/
-│   └── index.ts            # Autonomous swap agent — full pipeline
-├── chains.json             # Single source of truth for supported chains
-├── cstart.sh               # Interactive chain selector
-├── Dockerfile
-├── docker-compose.yml
-└── .env.example
+│   ├── server.ts               # Express server — /best-network, /swap, /tx, /confirm, /dashboard
+│   ├── smartPaymentRouter.ts   # Chain selection: score = gasCost + finality × $0.0001/s
+│   ├── orchestrator.ts         # LLM intent parsing (Gemini 2.5 Flash Lite)
+│   ├── riskAgent.ts            # Risk evaluation — price impact + route quality
+│   ├── tokenResolver.ts        # Token address resolution (per-chain)
+│   ├── analyticsAgent.ts       # Onchain swap + x402 + A2A recording
+│   ├── clawdmintA2A.ts         # A2A + x402 call to external agent (agent0-sdk)
+│   └── dex/
+│       ├── types.ts            # Shared DEX types
+│       ├── scoring.ts          # Multi-factor route scoring (price/liquidity/gas/reliability)
+│       ├── liquidity.ts        # Uniswap V3 pool liquidity checks
+│       └── integrations/
+│           ├── okx.ts          # OKX DEX Aggregator — quote + TX data
+│           └── uniswap.ts      # Uniswap Trading API — quote + Permit2 TX
+├── contracts/
+│   └── XFlowAnalytics.sol      # Analytics contract (deployed · X Layer)
+├── public/
+│   └── dashboard.html          # Real-time dashboard with Route Decision Log
+│
+├── sdk/                        # @xflow/sdk — drop-in client library
+│   └── src/
+│       └── index.ts            # XFlowClient class
+│
+└── client-agent/               # Example: autonomous agent using the SDK
+    ├── index.ts                # Full swap pipeline in ~5 lines
+    └── cstart.sh               # Interactive chain selector (X Layer / Unichain)
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+| Requirement | Purpose | How to get |
+|-------------|---------|------------|
+| `PRIVATE_KEY` (XFlow wallet) | Analytics TXs + A2A payments | Any EVM wallet |
+| OKX API key | OKX DEX Aggregator | [OKX Web3 Developer Portal](https://web3.okx.com) |
+| Uniswap API key | Uniswap Trading API | [developers.uniswap.org](https://developers.uniswap.org) |
+| OpenRouter API key | LLM intent parsing | [openrouter.ai](https://openrouter.ai) |
+| PayAI API key | x402 facilitator | [merchant.payai.network](https://merchant.payai.network) |
+| OKB on X Layer | Gas for swap TXs (server wallet) | OKX Exchange → withdraw to X Layer |
+| `PRIVATE_KEY` (client wallet) | x402 payments + swap broadcasting | Any EVM wallet |
+| USDC on Avalanche/Base/Polygon/X Layer | x402 payment source | Any DEX or CEX |
+| OKB on X Layer or ETH on Unichain | Gas for swap TXs (client wallet) | OKX Exchange or bridge |
+
+---
+
+### Step 1 — Run XFlow Server
+
+```bash
+git clone https://github.com/cryptohakka/xflow
+cd xflow
+cp .env.example .env
+# Edit .env — fill in all required values
+docker compose up -d
+```
+
+Dashboard: `http://localhost:3010`
+
+`.env.example`:
+```bash
+PRIVATE_KEY=0x...            # XFlow server wallet (needs OKB on X Layer)
+OKX_API_KEY=                 # OKX Web3 Developer Portal
+OKX_SECRET_KEY=
+OKX_PASSPHRASE=
+UNISWAP_API_KEY=             # developers.uniswap.org
+OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
+ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
+PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
+PAYAI_API_KEY_ID=            # PayAI merchant portal
+PAYAI_API_KEY_SECRET=
+PORT=3010
+```
+
+---
+
+### Step 2 — Use the SDK
+
+Install the SDK into your agent:
+
+```bash
+cd sdk && npm install
+```
+
+Then in your agent:
+
+```typescript
+import { XFlowClient } from '../sdk/src';
+
+const xflow = new XFlowClient({ privateKey: process.env.PRIVATE_KEY as `0x${string}` });
+const result = await xflow.swap('swap 0.01 USDC to USDT0');
+console.log(result);
+```
+
+That's it. The SDK handles:
+- Chain selection via SmartPaymentRouter (`GET /best-network`)
+- x402 payment handshake (automatic, no API keys needed)
+- DEX routing decision (OKX or Uniswap, scored automatically)
+- Permit2 EIP-712 signing for Uniswap routes (client-side, key never leaves)
+- TX broadcast and confirmation
+- A2A analysis retrieval
+
+---
+
+### Step 3 — Run the Example Agent
+
+```bash
+cd client-agent
+./cstart.sh   # interactive: select X Layer or Unichain
+```
+
+`client-agent/.env.example`:
+```bash
+PRIVATE_KEY=0x...                    # Your wallet
+XFLOW_URL=https://xflow.a2aflow.space
+SWAP_QUERY=swap 0.01 USDC to USDT0
+CHAIN_ID=130                         # 196=X Layer, 130=Unichain (overridden by cstart.sh)
+```
+
+The agent will:
+1. Ask XFlow for the optimal payment chain (`GET /best-network`)
+2. Pay $0.001 USDC to XFlow via x402
+3. Receive quote + risk + route decision (OKX or Uniswap)
+4. For Uniswap: sign Permit2 EIP-712 locally, submit to `/tx`
+5. For OKX: request fresh TX via `/tx`, sign and broadcast
+6. Pay $0.001 USDC to confirm the swap
+7. Receive TX analysis from external A2A agent
+
+---
+
+### Step 4 — Raw API (no SDK)
+
+If you prefer direct HTTP calls:
+
+```typescript
+import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
+import { ExactEvmScheme } from '@x402/evm';
+import { privateKeyToAccount } from 'viem/accounts';
+
+const account = privateKeyToAccount(PRIVATE_KEY);
+
+const { selectedNetwork } = await fetch(
+  `http://localhost:3010/best-network?address=${account.address}`
+).then(r => r.json());
+
+const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
+  schemes: [{ network: selectedNetwork.network, client: new ExactEvmScheme(account) }],
+});
+
+const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    query: 'swap 0.01 USDC to USDT0',
+    userAddress: account.address,
+  }),
+});
 ```
 
 ---
@@ -325,110 +457,6 @@ sequenceDiagram
     XFlow->>A2A: A2A call (x402 autopayment $0.001)
     A2A-->>XFlow: TX explanation + next actions
     XFlow-->>Agent: result + suggestions
-```
-
----
-
-## Quick Start
-
-### Prerequisites
-
-| Requirement | Purpose | How to get |
-|-------------|---------|------------|
-| `PRIVATE_KEY` (XFlow wallet) | Analytics TXs + A2A payments | Any EVM wallet |
-| OKX API key | OKX DEX Aggregator | [OKX Web3 Developer Portal](https://web3.okx.com) |
-| Uniswap API key | Uniswap Trading API | [developers.uniswap.org](https://developers.uniswap.org) |
-| OpenRouter API key | LLM intent parsing | [openrouter.ai](https://openrouter.ai) |
-| PayAI API key | x402 facilitator | [merchant.payai.network](https://merchant.payai.network) |
-| OKB on X Layer | Gas for swap TXs (server wallet) | OKX Exchange → withdraw to X Layer |
-| `PRIVATE_KEY` (client wallet) | x402 payments + swap broadcasting | Any EVM wallet |
-| USDC on Avalanche/Base/Polygon/X Layer | x402 payment source | Any DEX or CEX |
-| OKB on X Layer | Gas for swap TXs (client wallet) | OKX Exchange → withdraw to X Layer |
-
----
-
-### Step 1 — Run XFlow Server
-
-```bash
-git clone https://github.com/cryptohakka/xflow
-cd xflow
-cp .env.example .env
-# Edit .env — fill in all required values
-docker compose up -d
-```
-
-Dashboard: `http://localhost:3010`
-
-`.env.example`:
-```bash
-PRIVATE_KEY=0x...            # XFlow server wallet (needs OKB on X Layer)
-OKX_API_KEY=                 # OKX Web3 Developer Portal
-OKX_SECRET_KEY=
-OKX_PASSPHRASE=
-UNISWAP_API_KEY=             # developers.uniswap.org
-OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
-ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
-PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
-PAYAI_API_KEY_ID=            # PayAI merchant portal
-PAYAI_API_KEY_SECRET=
-PORT=3010
-```
-
----
-
-### Step 2 — Run Client Agent
-
-```bash
-cd client-agent
-cp .env.example .env
-# Edit .env
-./cstart.sh   # interactive chain selector
-```
-
-`client-agent/.env.example`:
-```bash
-PRIVATE_KEY=0x...                    # Your wallet
-XFLOW_URL=http://localhost:3010      # XFlow server URL
-SWAP_QUERY=swap 0.01 USDC to USDT0  # Natural language swap instruction
-CHAIN_ID=130                         # 196=X Layer, 130=Unichain (overridden by cstart.sh)
-```
-
-The agent will:
-1. Ask XFlow for the optimal payment chain (`GET /best-network`)
-2. Pay $0.001 USDC to XFlow via x402
-3. Receive quote + risk + route decision (OKX or Uniswap)
-4. For Uniswap: sign Permit2 EIP-712 locally, submit to `/tx`
-5. For OKX: request fresh TX via `/tx`, sign and broadcast
-6. Pay $0.001 USDC to confirm the swap
-7. Receive TX analysis from external A2A agent
-
----
-
-### Step 3 — Use Your Own Agent
-
-```typescript
-import { wrapFetchWithPaymentFromConfig } from '@x402/fetch';
-import { ExactEvmScheme } from '@x402/evm';
-import { privateKeyToAccount } from 'viem/accounts';
-
-const account = privateKeyToAccount(PRIVATE_KEY);
-
-const { selectedNetwork } = await fetch(
-  `http://localhost:3010/best-network?address=${account.address}`
-).then(r => r.json());
-
-const fetchWithPayment = wrapFetchWithPaymentFromConfig(fetch, {
-  schemes: [{ network: selectedNetwork.network, client: new ExactEvmScheme(account) }],
-});
-
-const swapRes = await fetchWithPayment('http://localhost:3010/swap', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    query: 'swap 0.01 USDC to USDT0',
-    userAddress: account.address,
-  }),
-});
 ```
 
 ---
@@ -623,6 +651,7 @@ PORT=3010
 
 ## Roadmap
 
+- [ ] Intent-based negotiation (agent bargains for best price across DEXes)
 - [ ] A2A agent registry (ERC-8004)
 - [ ] Composable agent pipeline (user-selectable A2A agent chains)
 - [ ] Per-tier pricing (auto-settled via x402)
@@ -630,7 +659,7 @@ PORT=3010
 - [ ] Additional chains (Abstract, SKALE)
 - [ ] Volume-based pricing (high-frequency agent discounts)
 - [ ] Multi-chain split payments
-- [ ] `npm install @xflow/payment-router` SDK package
+- [ ] `npm publish @xflow/sdk` (public package)
 - [ ] Persistent decision latency metric (onchain)
 
 ---
