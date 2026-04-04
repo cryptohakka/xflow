@@ -240,8 +240,9 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
     };
   }
 
-  await new Promise(r => setTimeout(r, 1100));
-
+  if (routeDecision?.selected === 'Uniswap') {
+    await new Promise(r => setTimeout(r, 1100));
+  }
   // Step 5: DEX Agent (generate TX data)
   let result: any;
 
