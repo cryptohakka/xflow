@@ -139,7 +139,7 @@ export async function orchestrate(query: string, options: OrchestratorOptions) {
       fromAmount:       intent.amount || '1.0',
       toAmount:         toAmount.toFixed(6),
       route:            'Uniswap V3',
-      priceImpact:      `${(rawImpact * 100).toFixed(4)}%`,
+      priceImpact:      `${rawImpact.toFixed(4)}%`,
       estimateGasFee:   '0',
       isHoneyPot:       false,
       taxRate:          '0',

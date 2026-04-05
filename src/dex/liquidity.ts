@@ -2,11 +2,11 @@
  * XFlow DEX - Route selection (core orchestration)
  */
 import { SwapRequest, RouteDecision, LIQUIDITY_THRESHOLD_USD, STABLECOINS, TOKENS } from './types';
+import { getTokenDecimals } from '../utils';
 import { getSwapQuote } from './integrations/okx';
-import { getUniswapPoolLiquidity, getUniswapQuote, getUniswapSwapTx, UNISWAP_SUPPORTED_CHAINS } from './integrations/uniswap';
+import { getUniswapPoolLiquidity, getUniswapQuote, UNISWAP_SUPPORTED_CHAINS } from './integrations/uniswap';
 import { scoreRoutes } from './scoring';
 
-// Chains where OKX DEX Aggregator is available
 const OKX_SUPPORTED_CHAINS = new Set([196, 8453, 137, 43114]);
 
 export interface BestRouteResult {
@@ -23,10 +23,11 @@ export async function selectBestRoute(
   const toAddr   = req.toTokenAddress   || TOKENS[(req.toToken   || '').toUpperCase()] || '';
 
   const fromSym   = (req.fromTokenSymbol || req.fromToken || '').toUpperCase();
-  const decimals  = STABLECOINS.includes(fromSym) ? 6 : 18;
+  const decimals  = getTokenDecimals(fromSym);
   const amountRaw = Math.floor(parseFloat(req.amount) * 10 ** decimals).toString();
 
-  // ── OKX非対応チェーン: Uniswap直接 ───────────────────────────
+  // -- OKX-unsupported chain: route directly through Uniswap --
+  // liquidityUSD is not meaningful here: no OKX pool exists to compare against.
   if (!OKX_SUPPORTED_CHAINS.has(chainId)) {
     console.log(`⛓️  Chain ${chainId} not supported by OKX → Uniswap direct`);
 
@@ -44,7 +45,6 @@ export async function selectBestRoute(
     }
 
     const toAmount = uniResult.toAmount;
-    const liquidityUSD = await getUniswapPoolLiquidity(chainId, fromAddr, toAddr);
 
     const quote = {
       fromToken:        req.fromToken.toUpperCase(),
@@ -59,7 +59,7 @@ export async function selectBestRoute(
       toTokenUnitPrice: '0',
       fromTokenAddress: fromAddr,
       toTokenAddress:   toAddr,
-      spender:          '',  // set from freshTx.to
+      spender:          '',
       chainId,
     };
 
@@ -67,17 +67,17 @@ export async function selectBestRoute(
       selected: 'Uniswap',
       okx: null,
       uniswap: {
-        route: 'Uniswap',
+        route:            'Uniswap',
         toAmount,
-        priceScore:      1,
-        liquidityScore:  Math.min(1, liquidityUSD / 1_000_000),
-        gasScore:        1,
+        priceScore:       1,
+        liquidityScore:   1,  // not applicable: no OKX pool on this chain
+        gasScore:         1,
         reliabilityScore: 0.85,
-        totalScore:      1,
-        reason: `Uniswap direct · chain ${chainId} · liq $${liquidityUSD.toFixed(0)} · impact ${uniResult.priceImpact}`,
+        totalScore:       1,
+        reason: `Uniswap direct · chain ${chainId} · impact ${uniResult.priceImpact}`,
       },
       reason: `Uniswap direct (OKX not available on chain ${chainId})`,
-      liquidityUSD,
+      liquidityUSD: -1,  // -1 = not applicable, not zero liquidity
     };
 
     console.log(`🦄 Uniswap direct: ${req.fromToken} → ${req.toToken} · impact ${uniResult.priceImpact}`);
@@ -85,21 +85,19 @@ export async function selectBestRoute(
     return { quote, decision, uniswapRawQuote: uniResult.rawQuote };
   }
 
-  // ── OKX対応チェーン: 従来のscoring ───────────────────────────
+  // -- OKX-supported chain: dual-route scoring --
 
-  // Step 1: OKX quote
   const okxQuote  = await getSwapQuote(req);
   const okxAmount = parseFloat(okxQuote.toAmount);
   const okxGasUSD = parseFloat(okxQuote.estimateGasFee || '0') / 1e18 * 40;
 
-  // Step 2: Liquidity check
   const liquidityUSD = await getUniswapPoolLiquidity(chainId, fromAddr, toAddr);
   console.log(`📊 Uniswap pool liquidity: $${liquidityUSD.toLocaleString()}`);
 
   if (liquidityUSD < LIQUIDITY_THRESHOLD_USD || !UNISWAP_SUPPORTED_CHAINS[chainId]) {
     const reason = liquidityUSD < LIQUIDITY_THRESHOLD_USD
-      ? `Uniswap liquidity $${liquidityUSD.toFixed(0)} below threshold $${LIQUIDITY_THRESHOLD_USD} → OKX fixed`
-      : `Chain ${chainId} not supported by Uniswap → OKX fixed`;
+      ? `Uniswap liquidity $${liquidityUSD.toFixed(0)} below threshold $${LIQUIDITY_THRESHOLD_USD} → OKX`
+      : `Chain ${chainId} not supported by Uniswap → OKX`;
     console.log(`   ${reason}`);
 
     const { okx } = scoreRoutes(okxAmount, null, liquidityUSD, okxGasUSD, 0);
@@ -109,7 +107,6 @@ export async function selectBestRoute(
     };
   }
 
-  // Step 3: Uniswap quote
   const uniResult = await getUniswapQuote(
     chainId, fromAddr, toAddr, amountRaw,
     req.userAddress !== '0x0000000000000000000000000000000000000001' ? req.userAddress : undefined,
@@ -117,7 +114,6 @@ export async function selectBestRoute(
   const uniAmount = uniResult?.toAmount ?? null;
   const uniGasUSD = uniResult?.gasUSD   ?? 0;
 
-  // Step 4: Score both routes
   const { okx: okxScore, uniswap: uniswapScore } = scoreRoutes(
     okxAmount, uniAmount, liquidityUSD, okxGasUSD, uniGasUSD,
   );
@@ -131,7 +127,6 @@ export async function selectBestRoute(
   console.log(`🏆 Route selected: ${selectedRoute} (score ${winnerScore.totalScore.toFixed(3)} vs ${loserScore.totalScore.toFixed(3)})`);
   console.log(`   ${winnerScore.reason}`);
 
-  // Uniswap選択時はpriceImpactをUniswap APIから上書き
   let finalQuote = okxQuote;
   if (selectedRoute === 'Uniswap' && uniResult) {
     finalQuote = {

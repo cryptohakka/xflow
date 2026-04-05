@@ -419,7 +419,7 @@ app.post('/tx', async (req: Request, res: Response) => {
 
   console.log('\n════════════════════════════════════════════════════════════');
   console.log('🔄 Fresh TX data requested');
-  console.log(`   query: "${query}" · chain: ${txChainId}`);
+  console.log(`   query: "${query}" · chain: ${txChainId} · rawQuote: ${req.body.uniswapRawQuote ? "present" : "null"} · sig: ${permit2Signature ? "present" : "none"}`);
   console.log('════════════════════════════════════════════════════════════');
 
   try {
