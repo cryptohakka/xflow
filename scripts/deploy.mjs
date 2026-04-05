@@ -42,8 +42,8 @@ const result = spawnSync('npx', ['solc', '--standard-json'], {
   maxBuffer: 10 * 1024 * 1024,
 });
 
-const jsonLine = result.stdout.split("\n").find(l => l.trim().startsWith("{"));
-const output = JSON.parse(result.stdout);
+const jsonStart = result.stdout.indexOf('{');
+const output = JSON.parse(result.stdout.slice(jsonStart));
 
 if (output.errors?.some(e => e.severity === 'error')) {
   console.error(output.errors.filter(e => e.severity === 'error').map(e => e.message).join('\n'));

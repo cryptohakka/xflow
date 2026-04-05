@@ -40,21 +40,20 @@ const EXPLORER_BASES: Record<string, string> = {
   avalanche: 'https://snowtrace.io/tx/',
 };
 
-// chains.jsonをバンドル（SDKに内包）
 const CHAINS: Record<string, {
   name: string; rpc: string; explorer: string;
   nativeCurrency: { name: string; symbol: string; decimals: number };
 }> = {
-  "196":  { name: "X Layer", rpc: "https://rpc.xlayer.tech", explorer: "xlayer",
-             nativeCurrency: { name: "OKB", symbol: "OKB", decimals: 18 } },
-  "130":  { name: "Unichain", rpc: "https://mainnet.unichain.org", explorer: "unichain",
-             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } },
-  "8453": { name: "Base", rpc: "https://mainnet.base.org", explorer: "base",
-             nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 } },
-  "137":  { name: "Polygon", rpc: "https://polygon-rpc.com", explorer: "polygon",
+  "196":  { name: "X Layer",   rpc: "https://rpc.xlayer.tech",                 explorer: "xlayer",
+             nativeCurrency: { name: "OKB",   symbol: "OKB",  decimals: 18 } },
+  "130":  { name: "Unichain",  rpc: "https://mainnet.unichain.org",             explorer: "unichain",
+             nativeCurrency: { name: "Ether", symbol: "ETH",  decimals: 18 } },
+  "8453": { name: "Base",      rpc: "https://mainnet.base.org",                 explorer: "base",
+             nativeCurrency: { name: "Ether", symbol: "ETH",  decimals: 18 } },
+  "137":  { name: "Polygon",   rpc: "https://polygon-rpc.com",                  explorer: "polygon",
              nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 } },
-  "43114":{ name: "Avalanche", rpc: "https://api.avax.network/ext/bc/C/rpc", explorer: "avalanche",
-             nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 } },
+  "43114":{ name: "Avalanche", rpc: "https://api.avax.network/ext/bc/C/rpc",   explorer: "avalanche",
+             nativeCurrency: { name: "AVAX",  symbol: "AVAX", decimals: 18 } },
 };
 
 function explorerLink(hash: string, key: string): string {
@@ -156,13 +155,15 @@ export class XFlowClient {
     if (quoteData.result?.data?.status === 'rejected')
       throw new Error(`Swap rejected by Risk Agent: ${JSON.stringify(quoteData.result.data.risk)}`);
 
-    const quote          = quoteData.result?.data?.quote;
-    const risk           = quoteData.result?.data?.risk;
-    const permitData     = quoteData.result?.data?.permitData ?? null;
+    const quote           = quoteData.result?.data?.quote;
+    const risk            = quoteData.result?.data?.risk;
+    const permitData      = quoteData.result?.data?.permitData ?? null;
     const uniswapRawQuote = quoteData.result?.data?.uniswapRawQuote ?? null;
+    const routeDecision   = quoteData.result?.data?.routeDecision;
+    const selectedDex     = routeDecision?.selected ?? 'unknown';  // 'Uniswap' | 'OKX' | 'unknown'
 
     if (!quote) throw new Error(`No quote data: ${JSON.stringify(quoteData)}`);
-    log(`✅ Quote: ${quote.fromAmount} ${quote.fromToken} → ${quote.toAmount} ${quote.toToken}`);
+    log(`✅ Quote: ${quote.fromAmount} ${quote.fromToken} → ${quote.toAmount} ${quote.toToken} via ${selectedDex}`);
 
     // 3. Permit2 signing (Uniswap only)
     let permit2Signature: string | undefined;
@@ -263,7 +264,10 @@ export class XFlowClient {
         fromAmount: quote.fromAmount, toAmount: quote.toAmount,
         paymentNetwork: swapPaymentNetwork || quoteData.result?.network,
         route: quote.route, riskLevel: risk?.riskLevel,
-        agentAddress: account.address, swapX402TxHash,
+        agentAddress: account.address,
+        swapX402TxHash,
+        chainId,
+        selectedDex,
       }),
     });
 

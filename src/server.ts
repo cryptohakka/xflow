@@ -226,7 +226,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
     const {
       txHash, fromToken, toToken, fromAmount, toAmount,
       paymentNetwork, route, riskLevel, agentAddress,
-      swapX402TxHash, confirmX402TxHash,
+      swapX402TxHash, confirmX402TxHash, chainId, selectedDex,
     } = req.body;
 
     if (!txHash) return res.status(400).json({ error: 'txHash required' });
@@ -235,10 +235,11 @@ app.post('/confirm', async (req: Request, res: Response) => {
     console.log(`✅ Swap complete`);
     console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
     console.log(`   TX: ${txHash}`);
+    console.log(`   Chain: ${chainId} · DEX: ${selectedDex || 'unknown'}`);
     console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`);
     console.log(`${'─'.repeat(55)}`);
 
-    const { recordSwapOnchain, recordA2ACallOnchain, recordX402PaymentOnchain } = await import('./analyticsAgent.js');
+    const { recordSwapOnchain, recordX402PaymentOnchain } = await import('./analyticsAgent.js');
 
     const analyticsTx = await recordSwapOnchain({
       agentAddress:   agentAddress   || '0x0000000000000000000000000000000000000000',
@@ -250,6 +251,8 @@ app.post('/confirm', async (req: Request, res: Response) => {
       route:          route          || 'unknown',
       riskLevel:      riskLevel      || 'LOW',
       txHash:         txHash,
+      chainId:        chainId ? parseInt(chainId) : 196,
+      selectedDex:    selectedDex    || 'unknown',
     });
 
     if (swapX402TxHash) {
@@ -262,7 +265,6 @@ app.post('/confirm', async (req: Request, res: Response) => {
       }).catch((e: any) => console.warn('[Confirm] swap X402 record failed:', e.message));
     }
 
-
     let clawdmint = null;
     try {
       const { analyzeSwapWithClawdMint } = await import('./clawdmintA2A.js');
@@ -272,7 +274,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
         toToken:      toToken      || 'USDC',
         fromAmount:   fromAmount   || '0',
         toAmount:     toAmount     || '0',
-        chainId:      196,
+        chainId:      chainId ? parseInt(chainId) : 196,
         agentAddress: agentAddress || '0x0000000000000000000000000000000000000000',
       });
       clawdmint = {
@@ -285,7 +287,6 @@ app.post('/confirm', async (req: Request, res: Response) => {
     } catch (e: any) {
       console.warn('[Confirm] ClawdMint analysis failed:', e.message);
     }
-
 
     res.json({ success: true, analyticsTx, clawdmint });
   } catch (e: any) {
@@ -378,8 +379,8 @@ app.post('/swap', async (req: Request, res: Response) => {
 
     console.log(`⚡ Decision latency: ${decisionMs}ms`);
     res.json({ success: true, result, intent: result.intent, decisionMs,
-      permitData: result?.data?.permitData ?? null });  
- } catch (e: any) {
+      permitData: result?.data?.permitData ?? null });
+  } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
 });

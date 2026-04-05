@@ -100,7 +100,7 @@ Fees collected directly to `PAYEE_ADDRESS` with no intermediary.
 
 **[📊 Live Dashboard](https://xflow.a2aflow.space/dashboard.html)** — real-time Route Decision Log, swap history, x402 payment stats
 
-*All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b)*
+*All data verifiable onchain via [XFlowAnalytics.sol](https://www.okx.com/web3/explorer/xlayer/address/0x275a8d533388b096656c7bf7aeb209debdaa08b3)*
 
 ---
 
@@ -318,7 +318,7 @@ OKX_SECRET_KEY=
 OKX_PASSPHRASE=
 UNISWAP_API_KEY=             # developers.uniswap.org
 OPENROUTER_API_KEY=          # OpenRouter (Gemini 2.5 Flash Lite)
-ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
+ANALYTICS_CONTRACT=0x275a8d533388b096656c7bf7aeb209debdaa08b3
 PAYEE_ADDRESS=0x...          # x402 payment recipient (your revenue wallet)
 PAYAI_API_KEY_ID=            # PayAI merchant portal
 PAYAI_API_KEY_SECRET=
@@ -605,7 +605,7 @@ Source: [`src/riskAgent.ts`](./src/riskAgent.ts)
 
 | Contract | Address | Explorer |
 |----------|---------|---------|
-| XFlowAnalytics | `0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b` | [View on OKX Explorer](https://www.okx.com/web3/explorer/xlayer/address/0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b) |
+| XFlowAnalytics | `0x275a8d533388b096656c7bf7aeb209debdaa08b3` | [View on OKX Explorer](https://www.okx.com/web3/explorer/xlayer/address/0x275a8d533388b096656c7bf7aeb209debdaa08b3) |
 
 ---
 
@@ -631,7 +631,7 @@ OKX_SECRET_KEY=
 OKX_PASSPHRASE=
 UNISWAP_API_KEY=             # developers.uniswap.org
 OPENROUTER_API_KEY=          # Gemini 2.5 Flash Lite via OpenRouter
-ANALYTICS_CONTRACT=0xfb7f08ea7e59974a8b3a80898462dd7826e4b93b
+ANALYTICS_CONTRACT=0x275a8d533388b096656c7bf7aeb209debdaa08b3
 PAYEE_ADDRESS=0x...          # x402 payment recipient (XFlow revenue)
 PAYAI_API_KEY_ID=            # PayAI merchant portal
 PAYAI_API_KEY_SECRET=

@@ -14,6 +14,8 @@ contract XFlowAnalytics {
         uint8 riskLevel;
         uint256 timestamp;
         string txHash;
+        uint32 chainId;
+        string selectedDex;
     }
 
     struct FailedSwapRecord {
@@ -44,7 +46,7 @@ contract XFlowAnalytics {
         uint256 timestamp;
     }
 
-    event SwapExecuted(address indexed agent, string fromToken, string toToken, uint256 fromAmount, uint256 toAmount, string paymentNetwork, string route, uint8 riskLevel, uint256 timestamp, string txHash);
+    event SwapExecuted(address indexed agent, string fromToken, string toToken, uint256 fromAmount, uint256 toAmount, string paymentNetwork, string route, uint8 riskLevel, uint256 timestamp, string txHash, uint32 chainId, string selectedDex);
     event SwapFailed(address indexed agent, string fromToken, string toToken, uint256 fromAmount, string reason, string paymentNetwork, uint256 timestamp);
     event A2ACallMade(address indexed callerAgent, string externalAgent, string purpose, uint256 feePaid, string paymentNetwork, uint256 timestamp);
     event X402PaymentMade(address indexed agent, string endpoint, uint256 feePaid, string paymentNetwork, string paymentTxHash, uint256 timestamp);
@@ -71,10 +73,28 @@ contract XFlowAnalytics {
     address public owner;
     constructor() { owner = msg.sender; }
 
-    function recordSwap(address agent, string calldata fromToken, string calldata toToken, uint256 fromAmount, uint256 toAmount, string calldata paymentNetwork, string calldata route, uint8 riskLevel, string calldata txHash) external {
-        swaps.push(SwapRecord({ agent: agent, fromToken: fromToken, toToken: toToken, fromAmount: fromAmount, toAmount: toAmount, paymentNetwork: paymentNetwork, route: route, riskLevel: riskLevel, timestamp: block.timestamp, txHash: txHash }));
+    function recordSwap(
+        address agent,
+        string calldata fromToken,
+        string calldata toToken,
+        uint256 fromAmount,
+        uint256 toAmount,
+        string calldata paymentNetwork,
+        string calldata route,
+        uint8 riskLevel,
+        string calldata txHash,
+        uint32 chainId,
+        string calldata selectedDex
+    ) external {
+        swaps.push(SwapRecord({
+            agent: agent, fromToken: fromToken, toToken: toToken,
+            fromAmount: fromAmount, toAmount: toAmount,
+            paymentNetwork: paymentNetwork, route: route,
+            riskLevel: riskLevel, timestamp: block.timestamp,
+            txHash: txHash, chainId: chainId, selectedDex: selectedDex
+        }));
         agentSwapCount[agent]++; totalSwaps++; totalVolume += fromAmount;
-        emit SwapExecuted(agent, fromToken, toToken, fromAmount, toAmount, paymentNetwork, route, riskLevel, block.timestamp, txHash);
+        emit SwapExecuted(agent, fromToken, toToken, fromAmount, toAmount, paymentNetwork, route, riskLevel, block.timestamp, txHash, chainId, selectedDex);
     }
 
     function recordFailedSwap(address agent, string calldata fromToken, string calldata toToken, uint256 fromAmount, string calldata reason, string calldata paymentNetwork) external {

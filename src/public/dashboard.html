@@ -118,16 +118,56 @@
   .swap-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
   .swap-row {
     display:grid;
-    grid-template-columns: 1.4fr 1.1fr 0.6fr 1fr 1.1fr 0.9fr 0.9fr 0.7fr 0.65fr 0.85fr 1.3fr;
-    padding:0.9rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04);
-    font-size:0.88rem; align-items:center; transition:background 0.2s;
+    grid-template-columns: 1.1fr 1.3fr 0.55fr 1fr 1fr 1fr 1fr 0.65fr 0.6fr 0.85fr 1.2fr;
+    padding:0.85rem 1.2rem;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+    font-size:0.85rem; align-items:center; transition:background 0.2s;
+    cursor:default;
   }
-  .swap-row:hover { background:rgba(0,212,255,0.03); }
-  .swap-row.header { font-family:'Share Tech Mono',monospace; font-size:0.68rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); }
+  .swap-row:not(.header):not(.detail-row):hover { background:rgba(0,212,255,0.04); }
+  .swap-row.header { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); cursor:default; }
   .swap-row:last-child { border-bottom:none; }
-  .swap-row.x402-row   { background:rgba(251,146,60,0.025); }
-  .swap-row.x402-row:hover { background:rgba(251,146,60,0.055); }
+  .swap-row.x402-row   { background:rgba(251,146,60,0.02); }
+  .swap-row.x402-row:hover { background:rgba(251,146,60,0.05); }
   .swap-row.failed-row { background:rgba(255,71,87,0.03); }
+  .swap-row.expandable { cursor:pointer; }
+
+  /* ── Detail / Expanded Row ── */
+  .detail-row {
+    display:none;
+    padding:0.75rem 1.2rem 0.75rem 2rem;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+    background:rgba(0,0,0,0.25);
+    border-left:2px solid rgba(0,212,255,0.2);
+  }
+  .detail-row.open { display:block; }
+  .detail-inner { display:flex; gap:2rem; flex-wrap:wrap; align-items:flex-start; }
+  .detail-section { display:flex; flex-direction:column; gap:0.3rem; }
+  .detail-label { font-family:'Share Tech Mono',monospace; font-size:0.58rem; color:var(--dim); letter-spacing:0.12em; margin-bottom:0.15rem; }
+  .detail-val { font-family:'Share Tech Mono',monospace; font-size:0.68rem; color:var(--text); }
+  .detail-divider { width:1px; background:var(--border); align-self:stretch; }
+
+  .dex-scores { display:flex; flex-direction:column; gap:0.35rem; }
+  .dex-score-row { display:flex; align-items:center; gap:0.6rem; font-family:'Share Tech Mono',monospace; font-size:0.62rem; }
+  .dex-score-name { width:56px; color:var(--dim); }
+  .dex-score-track { width:80px; height:4px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; }
+  .dex-score-fill { height:100%; border-radius:2px; }
+  .dex-score-num { color:var(--dim); min-width:28px; }
+  .dex-winner-tag { font-size:0.6rem; color:var(--green); border:1px solid rgba(0,255,148,0.25); border-radius:3px; padding:0 4px; }
+
+  .endpoint-badge {
+    display:inline-block; font-family:'Share Tech Mono',monospace; font-size:0.65rem;
+    padding:0.15rem 0.5rem; border-radius:4px; cursor:pointer;
+    transition:opacity 0.2s;
+  }
+  .endpoint-badge:hover { opacity:0.8; }
+  .ep-x402  { background:rgba(251,146,60,0.12); color:var(--orange); border:1px solid rgba(251,146,60,0.3); }
+  .ep-swap  { background:rgba(0,212,255,0.1);   color:var(--accent); border:1px solid rgba(0,212,255,0.25); }
+  .ep-plain { background:rgba(255,255,255,0.05); color:var(--dim);   border:1px solid rgba(255,255,255,0.1); }
+
+  .chevron { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:rgba(0,212,255,0.4); margin-left:4px; display:inline-block; transition:transform 0.2s; }
+  .chevron.open { transform:rotate(90deg); }
+
   .type-badge { display:inline-block; padding:0.15rem 0.4rem; border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:0.62rem; font-weight:700; letter-spacing:0.04em; }
   .type-swap { background:rgba(0,212,255,0.1); color:var(--accent); border:1px solid rgba(0,212,255,0.25); }
   .type-x402 { background:rgba(251,146,60,0.12); color:var(--orange); border:1px solid rgba(251,146,60,0.3); }
@@ -140,44 +180,25 @@
   .risk-HIGH   { background:rgba(255,71,87,0.1);  color:var(--red);   border:1px solid rgba(255,71,87,0.2); }
   .network-tag { font-family:'Share Tech Mono',monospace; font-size:0.68rem; padding:0.15rem 0.5rem; border-radius:4px; background:rgba(0,212,255,0.08); color:var(--accent); border:1px solid rgba(0,212,255,0.15); }
 
-  /* ── Decision Log ── */
-  .decision-table { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  .decision-row {
-    display:grid;
-    grid-template-columns: 1.1fr 0.7fr 1fr 1fr 0.8fr 0.8fr 0.6fr 2fr;
-    padding:0.85rem 1.2rem; border-bottom:1px solid rgba(255,255,255,0.04);
-    font-size:0.85rem; align-items:center; transition:background 0.2s;
-  }
-  .decision-row:hover { background:rgba(0,212,255,0.03); }
-  .decision-row.header { font-family:'Share Tech Mono',monospace; font-size:0.65rem; color:var(--dim); letter-spacing:0.1em; background:rgba(0,212,255,0.03); }
-  .decision-row:last-child { border-bottom:none; }
-  .route-badge { display:inline-block; padding:0.15rem 0.5rem; border-radius:4px; font-family:'Share Tech Mono',monospace; font-size:0.65rem; font-weight:700; }
-  .route-okx     { background:rgba(0,212,255,0.1);  color:var(--accent); border:1px solid rgba(0,212,255,0.25); }
-  .route-uniswap { background:rgba(0,255,148,0.1);  color:var(--green);  border:1px solid rgba(0,255,148,0.25); }
-  .score-bar { display:flex; align-items:center; gap:0.5rem; }
-  .score-bar-track { width:70px; height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
-  .score-bar-fill { height:100%; border-radius:3px; }
-  .score-num { font-family:'Share Tech Mono',monospace; font-size:0.63rem; color:var(--dim); min-width:32px; }
-  .decision-reason { font-family:'Share Tech Mono',monospace; font-size:0.6rem; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .liq-val { font-family:'Share Tech Mono',monospace; font-size:0.68rem; }
-
   .loading { text-align:center; padding:4rem; color:var(--dim); font-family:'Share Tech Mono',monospace; font-size:0.85rem; }
   .no-rows  { padding:2rem; text-align:center; color:var(--dim); font-family:monospace; font-size:0.85rem; }
 
   @media(max-width:1100px) {
     .layers-row { grid-template-columns:1fr; }
-    .kpi-grid-2  { grid-template-columns:repeat(2,1fr); }
-    .decision-row { grid-template-columns: 1.1fr 0.7fr 1fr 1fr 0.6fr 2fr; }
-    .decision-row > *:nth-child(5),
-    .decision-row > *:nth-child(6) { display:none; }
+    .kpi-grid-2 { grid-template-columns:repeat(2,1fr); }
+    .swap-row { grid-template-columns: 1.1fr 1.3fr 0.55fr 1fr 1fr 0.65fr 0.85fr 1.2fr; }
+    .swap-row > *:nth-child(6),
+    .swap-row > *:nth-child(7),
+    .swap-row > *:nth-child(9) { display:none; }
   }
   @media(max-width:700px) {
     .global-row { grid-template-columns:1fr 1fr; }
     .kpi-grid-2 { grid-template-columns:1fr 1fr; }
-    .swap-row { grid-template-columns:1.4fr 1.1fr 0.6fr 1fr; }
-    .swap-row>*:nth-child(n+5) { display:none; }
-    .decision-row { grid-template-columns: 1fr 0.7fr 1fr 2fr; }
-    .decision-row > *:nth-child(n+4):not(:last-child) { display:none; }
+    .swap-row { grid-template-columns: 1.3fr 0.55fr 1fr 1fr 0.85fr 1.2fr; }
+    .swap-row > *:nth-child(1),
+    .swap-row > *:nth-child(6),
+    .swap-row > *:nth-child(7),
+    .swap-row > *:nth-child(9) { display:none; }
     .a2a-flow { flex-direction:column; }
   }
 </style>
@@ -258,35 +279,53 @@
 const NETWORK_NAMES = {
   'eip155:8453':'Base','eip155:137':'Polygon','eip155:43114':'Avalanche',
   'eip155:196':'X Layer','eip155:2741':'Abstract','eip155:1329':'Sei',
-  'eip155:1564830818':'SKALE','eip155:3338':'Peaq',
-  'avalanche':'Avalanche','polygon':'Polygon','base':'Base','xlayer':'X Layer'
+  'eip155:1564830818':'SKALE','eip155:3338':'Peaq','eip155:1301':'Unichain',
+  'avalanche':'Avalanche','polygon':'Polygon','base':'Base','xlayer':'X Layer','unichain':'Unichain'
+};
+const NETWORK_STYLE = {
+  'avalanche':    { bg:'rgba(232,65,66,0.15)',  color:'#e84142', border:'rgba(232,65,66,0.4)' },
+  'eip155:43114': { bg:'rgba(232,65,66,0.15)',  color:'#e84142', border:'rgba(232,65,66,0.4)' },
+  'base':         { bg:'rgba(0,82,255,0.15)',   color:'#4d8aff', border:'rgba(0,82,255,0.4)' },
+  'eip155:8453':  { bg:'rgba(0,82,255,0.15)',   color:'#4d8aff', border:'rgba(0,82,255,0.4)' },
+  'xlayer':       { bg:'rgba(255,255,255,0.08)',color:'#e0f4ff', border:'rgba(255,255,255,0.25)' },
+  'eip155:196':   { bg:'rgba(255,255,255,0.08)',color:'#e0f4ff', border:'rgba(255,255,255,0.25)' },
+  'unichain':     { bg:'rgba(255,0,122,0.12)',  color:'#ff007a', border:'rgba(255,0,122,0.35)' },
+  'eip155:1301':  { bg:'rgba(255,0,122,0.12)',  color:'#ff007a', border:'rgba(255,0,122,0.35)' },
+  'polygon':      { bg:'rgba(130,71,229,0.15)', color:'#a855f7', border:'rgba(130,71,229,0.4)' },
+  'eip155:137':   { bg:'rgba(130,71,229,0.15)', color:'#a855f7', border:'rgba(130,71,229,0.4)' },
 };
 const NETWORK_COLORS = {
-  'eip155:8453':'#0052ff','eip155:137':'#8247e5','eip155:43114':'#e84142',
-  'eip155:196':'#00d4ff','eip155:2741':'#00ff94','eip155:1329':'#ff6b6b',
-  'eip155:1564830818':'#a78bfa','eip155:3338':'#fb923c',
-  'avalanche':'#e84142','polygon':'#8247e5','base':'#0052ff','xlayer':'#00d4ff'
+  'eip155:8453':'#4d8aff','eip155:137':'#a855f7','eip155:43114':'#e84142',
+  'eip155:196':'#e0f4ff','eip155:2741':'#00ff94','eip155:1329':'#ff6b6b',
+  'eip155:1564830818':'#a78bfa','eip155:3338':'#fb923c','eip155:1301':'#ff007a',
+  'avalanche':'#e84142','polygon':'#a855f7','base':'#4d8aff','xlayer':'#e0f4ff','unichain':'#ff007a'
 };
 const EXPLORER_TX = {
   'eip155:8453':'https://basescan.org/tx/','eip155:137':'https://polygonscan.com/tx/',
   'eip155:43114':'https://snowtrace.io/tx/','eip155:196':'https://www.okx.com/web3/explorer/xlayer/tx/',
+  'eip155:1301':'https://unichain.blockscout.com/tx/',
   'eip155:2741':'https://abscan.org/tx/','eip155:1329':'https://seitrace.com/tx/',
   'avalanche':'https://snowtrace.io/tx/','polygon':'https://polygonscan.com/tx/',
   'base':'https://basescan.org/tx/','xlayer':'https://www.okx.com/web3/explorer/xlayer/tx/',
+  'unichain':'https://unichain.blockscout.com/tx/',
 };
 const CHAIN_PARAMS = {
-  'eip155:8453':{ name:'Base',tps:100,finality:2.0,gasCostUSD:0.001 },
-  'eip155:137': { name:'Polygon',tps:65,finality:3.5,gasCostUSD:0.002 },
-  'eip155:43114':{ name:'Avalanche',tps:4500,finality:0.8,gasCostUSD:0.003 },
-  'eip155:196': { name:'X Layer',tps:50,finality:1.0,gasCostUSD:0.0005 },
-  'eip155:1329':{ name:'Sei',tps:12000,finality:0.4,gasCostUSD:0.0002 },
-  'eip155:2741':{ name:'Abstract',tps:200,finality:1.0,gasCostUSD:0.0008 },
-  'base':{ name:'Base',tps:100,finality:2.0,gasCostUSD:0.001 },
-  'polygon':{ name:'Polygon',tps:65,finality:3.5,gasCostUSD:0.002 },
-  'avalanche':{ name:'Avalanche',tps:4500,finality:0.8,gasCostUSD:0.003 },
-  'xlayer':{ name:'X Layer',tps:50,finality:1.0,gasCostUSD:0.0005 },
+  'eip155:8453':  { name:'Base',      tps:100,   finality:2.0, gasCostUSD:0.001  },
+  'eip155:137':   { name:'Polygon',   tps:65,    finality:3.5, gasCostUSD:0.002  },
+  'eip155:43114': { name:'Avalanche', tps:4500,  finality:0.8, gasCostUSD:0.003  },
+  'eip155:196':   { name:'X Layer',   tps:50,    finality:1.0, gasCostUSD:0.0005 },
+  'eip155:1329':  { name:'Sei',       tps:12000, finality:0.4, gasCostUSD:0.0002 },
+  'eip155:2741':  { name:'Abstract',  tps:200,   finality:1.0, gasCostUSD:0.0008 },
+  'eip155:1301':  { name:'Unichain',  tps:1000,  finality:1.0, gasCostUSD:0.0003 },
+  'base':      { name:'Base',      tps:100,  finality:2.0, gasCostUSD:0.001  },
+  'polygon':   { name:'Polygon',   tps:65,   finality:3.5, gasCostUSD:0.002  },
+  'avalanche': { name:'Avalanche', tps:4500, finality:0.8, gasCostUSD:0.003  },
+  'xlayer':    { name:'X Layer',   tps:50,   finality:1.0, gasCostUSD:0.0005 },
+  'unichain':  { name:'Unichain',  tps:1000, finality:1.0, gasCostUSD:0.0003 },
 };
+
 function calcScore(p){ return p.gasCostUSD/Math.log(p.tps+1)-p.finality*0.1; }
+
 function buildRouteTooltip(network){
   const chosen=CHAIN_PARAMS[network]; if(!chosen) return '';
   const allChains=Object.entries(CHAIN_PARAMS).filter(([k])=>!k.startsWith('eip'))
@@ -303,6 +342,7 @@ function buildRouteTooltip(network){
     <div class="tooltip-winner">✓ Lowest score = best route<br>${rows}</div>
   </div>`;
 }
+
 function explorerUrl(net,hash){ return hash?(EXPLORER_TX[net]||'https://www.okx.com/web3/explorer/xlayer/tx/')+hash:null; }
 function shortHash(h){ return h?h.slice(0,6)+'...'+h.slice(-4):null; }
 function txCell(net,hash){
@@ -311,7 +351,113 @@ function txCell(net,hash){
 }
 function networkCell(net){
   const tip=buildRouteTooltip(net);
-  return `<span><span class="network-tag">${NETWORK_NAMES[net]||net||'—'}</span>${tip?`<span class="route-reason"><span class="route-reason-icon">i</span><span class="route-reason-tooltip">${tip}</span></span>`:''}</span>`;
+  const s=NETWORK_STYLE[net]||{bg:'rgba(0,212,255,0.08)',color:'var(--accent)',border:'rgba(0,212,255,0.15)'};
+  const tag=`<span style="font-family:'Share Tech Mono',monospace;font-size:0.68rem;padding:0.15rem 0.5rem;border-radius:4px;background:${s.bg};color:${s.color};border:1px solid ${s.border}">${NETWORK_NAMES[net]||net||'—'}</span>`;
+  return `<span>${tag}${tip?`<span class="route-reason"><span class="route-reason-icon">i</span><span class="route-reason-tooltip">${tip}</span></span>`:''}</span>`;
+}
+
+// ── Endpoint badge ─────────────────────────────────────────────
+// selectedDex is now stored onchain and returned directly from /dashboard
+function endpointBadge(row) {
+  if (row._rowType === 'x402') {
+    const lbl = (row.endpoint || '').replace(/^\//,'') || 'x402';
+    return `<span class="endpoint-badge ep-x402">/${lbl}</span>`;
+  }
+  if (row._rowType === 'swap') {
+    // v2: use selectedDex directly from onchain data
+    let label = '—';
+    if (row.selectedDex && row.selectedDex !== 'unknown') {
+      // normalize: 'Uniswap' or 'OKX'
+      const d = row.selectedDex.toLowerCase();
+      if (d.includes('uni'))    label = 'Uniswap';
+      else if (d.includes('okx')) label = 'OKX';
+      else label = row.selectedDex;
+    } else {
+      // fallback for old records without selectedDex
+      const rd = row.routeDecision;
+      const selected = rd ? (rd.selected || '') : '';
+      const lower = selected.toLowerCase();
+      if (lower.includes('uniswap'))      label = 'Uniswap';
+      else if (lower.includes('okx'))     label = 'OKX';
+      else if (row.network === 'unichain' || row.network === 'eip155:1301') label = 'Uniswap';
+      else if (row.network === 'xlayer'   || row.network === 'eip155:196')  label = 'OKX';
+    }
+    if (label === '—') return `<span class="endpoint-badge ep-plain">—</span>`;
+    return `<span class="endpoint-badge ep-swap" onclick="event.stopPropagation();toggleDetail(${row._uid})" style="cursor:pointer">${label} <span class="chevron" id="chev-${row._uid}">▶</span></span>`;
+  }
+  return `<span class="endpoint-badge ep-plain">—</span>`;
+}
+
+// ── Detail panel HTML ──────────────────────────────────────────
+function buildDetail(row) {
+  if (row._rowType !== 'swap') return '';
+
+  const sections = [];
+
+  // selectedDex from onchain (v2) — primary source
+  const dexName = (row.selectedDex && row.selectedDex !== 'unknown')
+    ? row.selectedDex
+    : (row.routeDecision?.selected || '—');
+
+  sections.push(`
+    <div class="detail-section">
+      <div class="detail-label">SELECTED DEX</div>
+      <div class="detail-val" style="color:var(--accent)">${dexName}</div>
+    </div>`);
+
+  // Chain info
+  const chainLabel = NETWORK_NAMES[row.network] || row.network || '—';
+  sections.push(`
+    <div class="detail-divider"></div>
+    <div class="detail-section">
+      <div class="detail-label">CHAIN</div>
+      <div class="detail-val" style="color:var(--text)">${chainLabel}</div>
+    </div>`);
+
+  // routeDecision scores (in-memory, may not be present)
+  const rd = row.routeDecision;
+  if (rd && typeof rd === 'object') {
+    const selected = rd.selected || dexName;
+    const liqUSD   = rd.liquidityUSD;
+    const reason   = rd.reason || '—';
+
+    const dexes = [];
+    if (rd.okx)     dexes.push({ name:'OKX',     score:rd.okx.totalScore,     win:selected.toLowerCase().includes('okx') });
+    if (rd.uniswap) dexes.push({ name:'Uniswap', score:rd.uniswap.totalScore, win:selected.toLowerCase().includes('uni') });
+    if (dexes.length) {
+      const maxScore = Math.max(...dexes.map(d=>d.score||0), 0.001);
+      const bars = dexes.map(d=>`
+        <div class="dex-score-row">
+          <span class="dex-score-name">${d.name}</span>
+          <div class="dex-score-track"><div class="dex-score-fill" style="width:${Math.min(100,(d.score||0)/maxScore*100)}%;background:var(--accent)"></div></div>
+          <span class="dex-score-num">${(d.score||0).toFixed(3)}</span>
+          ${d.win?'<span class="dex-winner-tag">✓</span>':''}
+        </div>`).join('');
+      sections.push(`<div class="detail-divider"></div>
+      <div class="detail-section">
+        <div class="detail-label">SCORES</div>
+        <div class="dex-scores">${bars}</div>
+        ${liqUSD!=null?`<div class="detail-val" style="margin-top:4px;color:${liqUSD>=50000?'var(--green)':'var(--gold)'}">liquidity $${liqUSD>=1000?(liqUSD/1000).toFixed(0)+'k':liqUSD.toFixed(0)}</div>`:''}
+      </div>`);
+    }
+
+    sections.push(`<div class="detail-divider"></div>
+    <div class="detail-section" style="max-width:300px">
+      <div class="detail-label">REASON</div>
+      <div class="detail-val" style="color:var(--dim);line-height:1.6;white-space:normal">${reason}</div>
+    </div>`);
+  }
+
+  return `<div class="detail-inner">${sections.join('')}</div>`;
+}
+
+// ── Toggle expand ──────────────────────────────────────────────
+function toggleDetail(uid) {
+  const detail = document.getElementById('detail-'+uid);
+  const chev   = document.getElementById('chev-'+uid);
+  if (!detail) return;
+  const isOpen = detail.classList.toggle('open');
+  if (chev) chev.classList.toggle('open', isOpen);
 }
 
 let activeFilter='all';
@@ -336,7 +482,6 @@ function render(data){
   window._agentShort=agentShort;
   window._timeStr=timeStr;
 
-  // GLOBAL
   const agentSet=new Set([
     ...(data.recentSwaps||[]).map(s=>s.agent),
     ...(data.recentX402Payments||[]).map(p=>p.agent),
@@ -345,8 +490,6 @@ function render(data){
   const uniqueAgents=agentSet.size;
   const totalTx=(parseInt(data.totalSwaps)||0)+(parseInt(data.totalX402Payments)||0)+(parseInt(data.totalFailed)||0);
   const avgDecisionMs=data.avgDecisionMs!=null?data.avgDecisionMs+'ms':'—';
-
-  // Payment KPIs
   const totalFees=parseFloat(data.totalX402Fees||0);
   const totalA2A=parseInt(data.totalA2ACalls)||0;
   const networkBreakdown=data.networkBreakdown||{};
@@ -354,14 +497,14 @@ function render(data){
   const gasSaved=parseFloat(data.totalGasSavedUSD)||0;
   const gasSavedTxCount=parseInt(data.gasSavedTxCount)||0;
   const gasSavedStr='$'+gasSaved.toFixed(6);
-
-  // Execution KPIs
   const totalSwaps=parseInt(data.totalSwaps)||0;
   const totalFailed=parseInt(data.totalFailed)||0;
   const totalVol=parseFloat(data.totalVolume)||0;
   const execSuccess=data.successRate||'100%';
   const routeBreakdown=data.routeBreakdown||{};
   const routeMax=Math.max(...Object.values(routeBreakdown).map(Number),1);
+  const dexBreakdown=data.dexBreakdown||{};
+  const dexMax=Math.max(...Object.values(dexBreakdown).map(Number),1);
 
   const validSwaps=(data.recentSwaps||[]).filter(s=>parseFloat(s.fromAmount)>0&&parseFloat(s.toAmount)>0);
   let avgSlippage='—';
@@ -371,10 +514,10 @@ function render(data){
     avgSlippage=avg.toFixed(4)+'%';
   }
 
-  // Rows
-  const swapRows  =(data.recentSwaps||[]).map(s=>({...s,_rowType:'swap',_status:'success'}));
-  const failedRows=(data.recentFailed||[]).map(s=>({...s,_rowType:'swap',_status:'failed'}));
-  const x402Rows  =(data.recentX402Payments||[]).map(p=>({...p,_rowType:'x402'}));
+  let uid=0;
+  const swapRows  =(data.recentSwaps||[]).map(s=>({...s,_rowType:'swap',_status:'success',_uid:uid++}));
+  const failedRows=(data.recentFailed||[]).map(s=>({...s,_rowType:'swap',_status:'failed',_uid:uid++}));
+  const x402Rows  =(data.recentX402Payments||[]).map(p=>({...p,_rowType:'x402',_uid:uid++}));
   const allRows   =[...swapRows,...failedRows,...x402Rows]
     .sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   window._allRows=allRows;
@@ -388,10 +531,10 @@ function render(data){
       <span class="inline-bar-count">${count}</span>
     </div>`).join('')||'<span style="color:var(--dim);font-size:0.7rem">No data</span>';
 
-  const routeBars=Object.entries(routeBreakdown).slice(0,4).map(([route,count])=>`
+  const dexBars=Object.entries(dexBreakdown).slice(0,4).map(([dex,count])=>`
     <div class="inline-bar-item">
-      <span class="inline-bar-name">${route}</span>
-      <div class="inline-bar-track"><div class="inline-bar-fill" style="width:${Number(count)/routeMax*100}%;background:var(--green)"></div></div>
+      <span class="inline-bar-name">${dex}</span>
+      <div class="inline-bar-track"><div class="inline-bar-fill" style="width:${Number(count)/dexMax*100}%;background:var(--green)"></div></div>
       <span class="inline-bar-count">${count}</span>
     </div>`).join('')||'<span style="color:var(--dim);font-size:0.7rem">No data</span>';
 
@@ -423,7 +566,6 @@ function render(data){
       </div>
 
       <div class="layers-row">
-        <!-- Payment Layer -->
         <div class="layer-panel">
           <div class="layer-header">
             <span class="layer-label payment">PAYMENT LAYER · x402</span>
@@ -458,7 +600,6 @@ function render(data){
           </div>
         </div>
 
-        <!-- Execution Layer -->
         <div class="layer-panel">
           <div class="layer-header">
             <span class="layer-label execution">EXECUTION LAYER · DEX</span>
@@ -469,7 +610,7 @@ function render(data){
             <div class="stat-card exec-card">
               <div class="stat-label">TOTAL SWAPS</div>
               <div class="stat-value" style="color:var(--green)">${totalSwaps}</div>
-              <div class="stat-sub">Executed on X Layer</div>
+              <div class="stat-sub">Executed on X Layer + Unichain</div>
             </div>
             <div class="stat-card exec-card">
               <div class="stat-label">TOTAL SWAP VOLUME</div>
@@ -487,34 +628,16 @@ function render(data){
               <div class="stat-sub">Best-route quality</div>
             </div>
             <div class="stat-card exec-card" style="grid-column:1/-1">
-              <div class="stat-label">DEX ROUTES USED</div>
-              <div class="inline-bars">${routeBars}</div>
+              <div class="stat-label">DEX USAGE (ONCHAIN)</div>
+              <div class="inline-bars">${dexBars}</div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Decision Log -->
-    <div class="section" style="padding-top:2rem">
-      <div class="section-title">ROUTE DECISION LOG</div>
-      <div class="decision-table">
-        <div class="decision-row header">
-          <span>TIME</span>
-          <span>SELECTED</span>
-          <span>OKX SCORE</span>
-          <span>UNI SCORE</span>
-          <span>OKX P/G</span>
-          <span>UNI P/G</span>
-          <span>LIQUIDITY</span>
-          <span>REASON</span>
-        </div>
-        ${renderDecisionLog(data.recentSwaps)}
-      </div>
-    </div>
-
     <!-- Activity Table -->
-    <div class="section" style="padding-top:0">
+    <div class="section" style="padding-top:2rem">
       <div class="section-title">RECENT AGENT ACTIVITY</div>
       <div class="filter-bar">
         <button class="filter-btn f-all      ${activeFilter==='all'     ?'active':''}" onclick="setFilter('all')">ALL</button>
@@ -525,7 +648,7 @@ function render(data){
       </div>
       <div class="swap-table" id="activity-table">
         <div class="swap-row header">
-          <span>AGENT</span><span>TIME</span><span>TYPE</span><span>ENDPOINT</span>
+          <span>AGENT</span><span>TIME</span><span>TYPE</span><span>DEX</span>
           <span>CHAIN</span><span>FROM</span><span>TO</span><span>X402 FEE</span>
           <span>RISK</span><span>STATUS</span><span>TX HASH</span>
         </div>
@@ -534,122 +657,64 @@ function render(data){
     </div>`;
 }
 
-// ── Decision Log renderer ──────────────────────────────────────
-function renderDecisionLog(swaps) {
-  const rows = (swaps || []).filter(s => s.routeDecision).slice(0, 15);
-  if (!rows.length) return `<div class="no-rows">No route decisions recorded yet</div>`;
-
-  return rows.map(s => {
-    const d = s.routeDecision;
-    const selected = d.selected || 'OKX';
-    const okx = d.okx || {};
-    const uni = d.uniswap || null;
-    const liqUSD = d.liquidityUSD != null ? d.liquidityUSD : null;
-
-    const selBadge = selected === 'Uniswap'
-      ? `<span class="route-badge route-uniswap">Uniswap</span>`
-      : `<span class="route-badge route-okx">OKX</span>`;
-
-    function scoreBar(score, color) {
-      const pct = Math.min(100, (score || 0) * 100);
-      return `<div class="score-bar">
-        <div class="score-bar-track"><div class="score-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-        <span class="score-num">${(score || 0).toFixed(3)}</span>
-      </div>`;
-    }
-
-    const okxBar = scoreBar(okx.totalScore, 'var(--accent)');
-    const uniBar = uni
-      ? scoreBar(uni.totalScore, 'var(--green)')
-      : `<span style="font-family:'Share Tech Mono',monospace;font-size:0.62rem;color:rgba(255,255,255,0.2)">N/A</span>`;
-
-    const okxPG = okx.priceScore != null
-      ? `<span style="font-family:'Share Tech Mono',monospace;font-size:0.63rem;color:var(--dim)">${okx.priceScore.toFixed(2)}/${(okx.gasScore||0).toFixed(2)}</span>`
-      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
-
-    const uniPG = uni && uni.priceScore != null
-      ? `<span style="font-family:'Share Tech Mono',monospace;font-size:0.63rem;color:var(--dim)">${uni.priceScore.toFixed(2)}/${(uni.gasScore||0).toFixed(2)}</span>`
-      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
-
-    const liqCell = liqUSD != null
-      ? `<span class="liq-val" style="color:${liqUSD>=50000?'var(--green)':'var(--gold)'}">$${liqUSD>=1000?(liqUSD/1000).toFixed(0)+'k':liqUSD.toFixed(0)}</span>`
-      : `<span style="color:rgba(255,255,255,0.2)">—</span>`;
-
-    const reason = d.reason || '—';
-    const t = window._timeStr ? window._timeStr(s.timestamp) : s.timestamp;
-
-    return `<div class="decision-row">
-      <span style="font-family:monospace;font-size:0.68rem;color:var(--dim)">${t}</span>
-      <span>${selBadge}</span>
-      ${okxBar}
-      ${uniBar}
-      ${okxPG}
-      ${uniPG}
-      ${liqCell}
-      <span class="decision-reason" title="${reason}">${reason}</span>
-    </div>`;
-  }).join('');
-}
-
-// ── Activity table renderer ───────────────────────────────────
 function renderRows(allRows,filter,agentShort,timeStr){
   let rows=allRows;
   if(filter==='x402')     rows=allRows.filter(r=>r._rowType==='x402');
   if(filter==='swap')     rows=allRows.filter(r=>r._rowType==='swap'&&r._status==='success');
   if(filter==='failed')   rows=allRows.filter(r=>r._status==='failed');
   if(filter==='highrisk') rows=allRows.filter(r=>r.riskLevel==='HIGH'||r._status==='failed');
-  rows=rows.slice(0,20);
+  rows=rows.slice(0,30);
   if(!rows.length) return `<div class="no-rows">No matching records</div>`;
+
   return rows.map(row=>{
+    const uid   = row._uid;
+    const net   = row.network||row.paymentNetwork||'';
+    const t     = timeStr(row.timestamp);
+    const agent = agentShort(row.agent);
+    const ep    = endpointBadge(row);
+    const hasDetail = row._rowType === 'swap';
+    const rowClass  = row._rowType==='x402' ? 'x402-row' : row._status==='failed' ? 'failed-row' : '';
+
+    let fromCell='<span style="color:rgba(255,255,255,0.2)">—</span>';
+    let toCell  ='<span style="color:rgba(255,255,255,0.2)">—</span>';
+    let feeCell ='<span style="color:rgba(255,255,255,0.2)">—</span>';
+    let riskCell='<span style="color:rgba(255,255,255,0.15)">—</span>';
+    let statusCell='';
+    let txCell_='';
+    let typeBadge='';
+
     if(row._rowType==='x402'){
-      const net=(row.network||row.paymentNetwork||'');
-      const fee=(row.feePaid||row.amount||'');
-      const lbl=(row.endpoint||'').replace(/^\//,'');
-      return `
-      <div class="swap-row x402-row">
-        <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${agentShort(row.agent)}</span>
-        <span style="font-family:monospace;font-size:0.7rem;color:var(--dim)">${timeStr(row.timestamp)}</span>
-        <span><span class="type-badge type-x402">X402</span></span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:0.68rem;color:var(--orange)">/${lbl}</span>
-        ${networkCell(net)}
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        <span style="color:var(--orange);font-family:'Share Tech Mono',monospace;font-size:0.72rem">${fee?'$'+fee:'—'}</span>
-        <span style="color:rgba(255,255,255,0.15)">—</span>
-        <span style="color:var(--green);font-size:0.75rem">✅ Success</span>
-        <span>${txCell(net,row.paymentTxHash||row.txHash)}</span>
-      </div>`;
+      const fee=row.feePaid||row.amount||'';
+      typeBadge=`<span class="type-badge type-x402">X402</span>`;
+      feeCell=`<span style="color:var(--orange);font-family:'Share Tech Mono',monospace;font-size:0.72rem">${fee?'$'+fee:'—'}</span>`;
+      statusCell=`<span style="color:var(--green);font-size:0.75rem">✅ Success</span>`;
+      txCell_=txCell(net,row.paymentTxHash||row.txHash);
     } else {
-      const s=row; const net=s.network||s.paymentNetwork||'';
-      if(s._status==='success') return `
-      <div class="swap-row">
-        <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${agentShort(s.agent)}</span>
-        <span style="font-family:monospace;font-size:0.7rem;color:var(--dim)">${timeStr(s.timestamp)}</span>
-        <span><span class="type-badge type-swap">SWAP</span></span>
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        ${networkCell(net)}
-        <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
-        <span style="color:var(--green)">${parseFloat(s.toAmount).toFixed(6)} ${s.toToken}</span>
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        <span><span class="risk-badge risk-${s.riskLevel}">${s.riskLevel}</span></span>
-        <span style="color:var(--green);font-size:0.75rem">✅ Success</span>
-        <span>${txCell(net,s.txHash)}</span>
-      </div>`;
-      return `
-      <div class="swap-row failed-row">
-        <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${agentShort(s.agent)}</span>
-        <span style="font-family:monospace;font-size:0.7rem;color:var(--dim)">${timeStr(s.timestamp)}</span>
-        <span><span class="type-badge type-swap">SWAP</span></span>
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        ${networkCell(net)}
-        <span style="color:var(--accent)">${parseFloat(s.fromAmount).toFixed(4)} ${s.fromToken}</span>
-        <span style="color:var(--dim)">—</span>
-        <span style="color:rgba(255,255,255,0.2)">—</span>
-        <span><span class="risk-badge risk-HIGH">HIGH</span></span>
-        <span style="color:var(--red);font-size:0.75rem">${s.reason==='risk_rejected'?'⛔ Risk Rejected':'❌ Broadcast Failed'}</span>
-        <span>${txCell(net,s.txHash)}</span>
-      </div>`;
+      typeBadge=`<span class="type-badge type-swap">SWAP</span>`;
+      if(parseFloat(row.fromAmount)>0) fromCell=`<span style="color:#ffffff">${parseFloat(row.fromAmount).toFixed(4)} ${row.fromToken||''}</span>`;
+      if(row._status==='success'&&parseFloat(row.toAmount)>0) toCell=`<span style="color:#ffffff">${parseFloat(row.toAmount).toFixed(6)} ${row.toToken||''}</span>`;
+      if(row.riskLevel) riskCell=`<span class="risk-badge risk-${row.riskLevel}">${row.riskLevel}</span>`;
+      statusCell=row._status==='success'
+        ? `<span style="color:var(--green);font-size:0.75rem">✅ Success</span>`
+        : `<span style="color:var(--red);font-size:0.75rem">${row.reason==='risk_rejected'?'⛔ Risk Rejected':'❌ Failed'}</span>`;
+      txCell_=txCell(net,row.txHash);
     }
+
+    const detail = hasDetail ? `<div class="detail-row" id="detail-${uid}">${buildDetail(row)}</div>` : '';
+
+    return `<div class="swap-row ${rowClass}">
+      <span style="font-family:monospace;font-size:0.75rem;color:var(--dim)">${agent}</span>
+      <span style="font-family:monospace;font-size:0.7rem;color:var(--dim)">${t}</span>
+      <span>${typeBadge}</span>
+      <span>${ep}</span>
+      ${networkCell(net)}
+      ${fromCell}
+      ${toCell}
+      ${feeCell}
+      ${riskCell}
+      ${statusCell}
+      <span>${txCell_}</span>
+    </div>${detail}`;
   }).join('');
 }
 
