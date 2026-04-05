@@ -236,7 +236,7 @@ app.post('/confirm', async (req: Request, res: Response) => {
     console.log(`   Swap: ${fromAmount} ${fromToken} → ${toAmount} ${toToken}`);
     console.log(`   TX: ${txHash}`);
     console.log(`   Chain: ${chainId} · DEX: ${selectedDex || 'unknown'}`);
-    console.log(`   🔗 https://www.okx.com/web3/explorer/xlayer/tx/${txHash}`);
+    console.log(`   🔗 ${chainId === 130 ? 'https://uniscan.xyz/tx/' : 'https://www.okx.com/web3/explorer/xlayer/tx/'}${txHash}`);
     console.log(`${'─'.repeat(55)}`);
 
     const { recordSwapOnchain, recordX402PaymentOnchain } = await import('./analyticsAgent.js');
