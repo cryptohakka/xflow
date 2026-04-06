@@ -11,8 +11,8 @@ import { explorerLink } from './utils.js';
 
 const CLAWDMINT_A2A = 'https://clawdmint-api.vercel.app/a2a';
 
-const USDT0_WOKB_POOL_XLAYER = 'https://app.uniswap.org/explore/pools/xlayer/0x63d62734847E55A266FCa4219A9aD0a02D5F6e02';
-const USDT0_WOKB_POOL_UNICHAIN = 'https://app.uniswap.org/explore/pools/unichain/0x77ea9d2be50eb3e82b62db928a1bcc573064dd2a14f5026847e755518c8659c9';
+const POOL_XLAYER = { name: 'USDT0/WOKB', url: 'https://app.uniswap.org/explore/pools/xlayer/0x63d62734847E55A266FCa4219A9aD0a02D5F6e02' };
+const POOL_UNICHAIN = { name: 'USDC/USD₮0', url: 'https://app.uniswap.org/explore/pools/unichain/0x77ea9d2be50eb3e82b62db928a1bcc573064dd2a14f5026847e755518c8659c9' };
 
 export interface SwapContext {
   txHash: string;
@@ -85,6 +85,7 @@ export async function analyzeSwapWithClawdMint(
   const sdk = new SDK({ chainId: 8453, rpcUrl, privateKey });
   const chainId = swap.chainId ?? 196;
   const agentAddress = process.env.PAYEE_ADDRESS || swap.agentAddress || '0x0000000000000000000000000000000000000000';
+  const pool = chainId === 130 ? POOL_UNICHAIN : POOL_XLAYER;
 
   console.log(`\n════════════════════════════════════════════════════════════`);
   console.log(`3️⃣  A2A Session (ClawdMint)`);
@@ -96,7 +97,7 @@ export async function analyzeSwapWithClawdMint(
     `I swapped ${swap.fromAmount} ${swap.fromToken} for ${swap.toAmount} ${swap.toToken}. ` +
     `\n\nPlease provide:` +
     `\n1. Brief TX analysis (1-2 sentences in plain English)` +
-    `\n2. Next action recommendation: the received ${swap.toToken} can be deployed to the USDT0/WOKB liquidity pool on Uniswap X Layer (${chainId === 130 ? USDT0_WOKB_POOL_UNICHAIN : USDT0_WOKB_POOL_XLAYER}). Is this a good move?`;
+    `\n2. Next action recommendation: the received ${swap.toToken} can be deployed to the ${pool.name} liquidity pool on Uniswap (${pool.url}). Is this a good move?`;
 
   console.log(`\n🧠 XFlow → ClawdMint:`);
   console.log(`   "${prompt.slice(0, 100)}..."`);
@@ -104,15 +105,14 @@ export async function analyzeSwapWithClawdMint(
   const { reply, settlementTx } = await sendMessage(sdk, prompt, agentAddress);
   const settlements = settlementTx ? [settlementTx] : [];
 
-  // Extract TX analysis and next actions from combined reply
   const lines = reply.split('\n').filter(l => l.trim());
   const txExplanation = lines.slice(0, 2).join(' ').trim() || reply.slice(0, 200);
   const nextActions = lines.slice(2).join(' ').trim() || reply.slice(200);
 
   console.log(`\n🤖 ClawdMint → XFlow:`);
   console.log(`   TX Analysis:  ${txExplanation.slice(0, 120)}...`);
-  console.log(`   Next Actions: Consider the USDT0/WOKB pool on ${chainId === 130 ? 'Unichain' : 'X Layer'} as a yield opportunity`);
-  console.log(`   Pool: ${chainId === 130 ? USDT0_WOKB_POOL_UNICHAIN : USDT0_WOKB_POOL_XLAYER}`);
+  console.log(`   Next Actions: Consider the ${pool.name} pool on ${chainId === 130 ? 'Unichain' : 'X Layer'} as a yield opportunity`);
+  console.log(`   Pool: ${pool.url}`);
   await recordA2ACallOnchain({
     callerAgent:    agentAddress,
     externalAgent:  'ClawdMint',
@@ -123,7 +123,7 @@ export async function analyzeSwapWithClawdMint(
 
   return {
     txExplanation,
-    nextActions: `Deploy ${swap.toToken} to USDT0/WOKB pool on ${chainId === 130 ? 'Unichain' : 'X Layer'} · ${chainId === 130 ? USDT0_WOKB_POOL_UNICHAIN : USDT0_WOKB_POOL_XLAYER}`,
+    nextActions: `Deploy ${swap.toToken} to ${pool.name} pool on ${chainId === 130 ? 'Unichain' : 'X Layer'} · ${pool.url}`,
     paidWithX402: settlements.length > 0,
     settlements,
   };
