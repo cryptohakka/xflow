@@ -6,7 +6,7 @@ XFlow is to AI agents what Stripe is to web apps.
 
 XFlow is built for developers building autonomous AI agents that need to transact onchain. It's a production-deployed multi-agent system where AI agents execute DeFi swaps on X Layer and Unichain, pay for services using x402 micropayments ($0.001 USDC/call), and autonomously pay other AI agents — all without human intervention after initial setup. Every payment, swap, and agent-to-agent call is recorded onchain.
 
-**[🎬 Demo Video](https://x.com/xflow_lab/status/2036330252180279791)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)** · **[📊 Dashboard](https://xflow.a2aflow.space/dashboard.html)**
+**[🎬 Demo Video](https://youtu.be/giwoN2rVO04)** · **[📦 GitHub](https://github.com/cryptohakka/xflow)** · **[📊 Dashboard](https://xflow.a2aflow.space/dashboard.html)**
 
 ---
 
