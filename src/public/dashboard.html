@@ -437,7 +437,7 @@ function buildDetail(row) {
       <div class="detail-section">
         <div class="detail-label">SCORES</div>
         <div class="dex-scores">${bars}</div>
-        ${liqUSD!=null?`<div class="detail-val" style="margin-top:4px;color:${liqUSD>=50000?'var(--green)':'var(--gold)'}">liquidity $${liqUSD>=1000?(liqUSD/1000).toFixed(0)+'k':liqUSD.toFixed(0)}</div>`:''}
+
       </div>`);
     }
 
@@ -508,11 +508,9 @@ function render(data){
 
   const validSwaps=(data.recentSwaps||[]).filter(s=>parseFloat(s.fromAmount)>0&&parseFloat(s.toAmount)>0);
   let avgSlippage='—';
-  if(validSwaps.length>0){
-    const avg=validSwaps.map(s=>Math.abs(1-(parseFloat(s.toAmount)/parseFloat(s.fromAmount)))*100)
-      .reduce((a,b)=>a+b,0)/validSwaps.length;
-    avgSlippage=avg.toFixed(4)+'%';
-  }
+  const avgVol=(data.recentSwaps||[]).reduce((a,s)=>a+parseFloat(s.toAmount||'0'),0);
+  const swapCnt=(data.recentSwaps||[]).length;
+  if(swapCnt>0){avgSlippage='$'+(avgVol/swapCnt).toFixed(4);}
 
   let uid=0;
   const swapRows  =(data.recentSwaps||[]).map(s=>({...s,_rowType:'swap',_status:'success',_uid:uid++}));
@@ -623,9 +621,9 @@ function render(data){
               <div class="stat-sub">${totalFailed} rejected by Risk Agent</div>
             </div>
             <div class="stat-card exec-card">
-              <div class="stat-label">AVG SLIPPAGE</div>
+              <div class="stat-label">AVG SWAP VOLUME</div>
               <div class="stat-value" style="font-size:1.8rem;color:${avgSlippage==='—'?'var(--dim)':'var(--green)'}">${avgSlippage}</div>
-              <div class="stat-sub">Best-route quality</div>
+              <div class="stat-sub">Per swap · USDC</div>
             </div>
             <div class="stat-card exec-card" style="grid-column:1/-1">
               <div class="stat-label">DEX USAGE (ONCHAIN)</div>
@@ -643,8 +641,8 @@ function render(data){
         <button class="filter-btn f-all      ${activeFilter==='all'     ?'active':''}" onclick="setFilter('all')">ALL</button>
         <button class="filter-btn f-x402     ${activeFilter==='x402'    ?'active':''}" onclick="setFilter('x402')">X402</button>
         <button class="filter-btn f-swap     ${activeFilter==='swap'    ?'active':''}" onclick="setFilter('swap')">SWAPS</button>
-        <button class="filter-btn f-failed   ${activeFilter==='failed'  ?'active':''}" onclick="setFilter('failed')">FAILED</button>
-        <button class="filter-btn f-highrisk ${activeFilter==='highrisk'?'active':''}" onclick="setFilter('highrisk')">HIGH RISK</button>
+        <button class="filter-btn f-failed   ${activeFilter==='failed'  ?'active':''}" onclick="setFilter('failed')">TX FAILED</button>
+        <button class="filter-btn f-highrisk ${activeFilter==='highrisk'?'active':''}" onclick="setFilter('highrisk')">RISK REJECTED</button>
       </div>
       <div class="swap-table" id="activity-table">
         <div class="swap-row header">
@@ -661,8 +659,8 @@ function renderRows(allRows,filter,agentShort,timeStr){
   let rows=allRows;
   if(filter==='x402')     rows=allRows.filter(r=>r._rowType==='x402');
   if(filter==='swap')     rows=allRows.filter(r=>r._rowType==='swap'&&r._status==='success');
-  if(filter==='failed')   rows=allRows.filter(r=>r._status==='failed');
-  if(filter==='highrisk') rows=allRows.filter(r=>r.riskLevel==='HIGH'||r._status==='failed');
+  if(filter==='failed')   rows=allRows.filter(r=>r._status==='failed'&&r.reason==='broadcast_failed');
+  if(filter==='highrisk') rows=allRows.filter(r=>r._status==='failed'&&r.reason==='risk_rejected');
   rows=rows.slice(0,30);
   if(!rows.length) return `<div class="no-rows">No matching records</div>`;
 
