@@ -111,6 +111,9 @@ export async function getUniswapQuote(
     console.log(`[Uniswap /v1/quote] toAmount=${toAmount} gasUSD=${gasUSD} priceImpact=${priceImpact}`);
     console.log('[Uniswap rawQuote keys]', JSON.stringify(Object.keys(data)));
     console.log('[Uniswap permitData]', JSON.stringify(data.permitData).slice(0, 200));
+    console.log('[Uniswap permitTransaction]', JSON.stringify(data.permitTransaction).slice(0, 200));
+    console.log('[Uniswap routing]', data.routing);
+    console.log('[Uniswap quote.routeType]', data.quote?.routeType);
     return { toAmount, gasUSD, priceImpact, rawQuote: data };
   } catch (e: any) {
     console.warn(`[Uniswap /v1/quote] error: ${e.message}`);

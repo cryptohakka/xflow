@@ -63,7 +63,7 @@ export function scoreRoutes(
     gasScore: uniswapGasScore,
     reliabilityScore: uniswapReliability,
     totalScore: uniswapTotal,
-    reason: `Uniswap V3 · price ${(uniswapPriceScore * 100).toFixed(1)}% · liq $${liquidityUSD.toFixed(0)} · gas $${uniswapGasUSD.toFixed(4)}`,
+    reason: `Uniswap V4 · price ${(uniswapPriceScore * 100).toFixed(1)}% · liq $${liquidityUSD.toFixed(0)} · gas $${uniswapGasUSD.toFixed(4)}`,
   };
 
   return { okx: okxScore, uniswap: uniswapScore };

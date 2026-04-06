@@ -51,7 +51,7 @@ export async function selectBestRoute(
       toToken:          req.toToken.toUpperCase(),
       fromAmount:       req.amount,
       toAmount:         toAmount.toFixed(6),
-      route:            'Uniswap V3',
+      route:            'Uniswap V4',
       priceImpact:      uniResult.priceImpact,
       estimateGasFee:   String(Math.round(uniResult.gasUSD * 1e18 / 2000)),
       isHoneyPot:       false,
@@ -133,7 +133,7 @@ export async function selectBestRoute(
       ...okxQuote,
       toAmount:    uniResult.toAmount.toFixed(6),
       priceImpact: uniResult.priceImpact,
-      route:       'Uniswap V3',
+      route:       'Uniswap V4',
     };
   }
 
